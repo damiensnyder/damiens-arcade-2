@@ -1,0 +1,30 @@
+{
+	"name": "damiens-arcade-2",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "concurrently \"vite dev\" \"tsx watch src/server/index.ts\"",
+		"build": "vite build",
+		"preview": "NODE_ENV=production tsx src/server/index.ts",
+		"prepare": "svelte-kit sync || echo ''",
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+	},
+	"dependencies": {
+		"ws": "^8.18.0",
+		"zod": "^3.24.1"
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-node": "^5.2.10",
+		"@sveltejs/kit": "^2.48.5",
+		"@sveltejs/vite-plugin-svelte": "^6.2.1",
+		"@types/ws": "^8.5.13",
+		"concurrently": "^9.1.2",
+		"svelte": "^5.43.8",
+		"svelte-check": "^4.3.4",
+		"tsx": "^4.19.2",
+		"typescript": "^5.9.3",
+		"vite": "^7.2.2"
+	}
+}

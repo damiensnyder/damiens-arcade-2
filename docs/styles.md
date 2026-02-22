@@ -1,0 +1,1 @@
+Emulate the look and feel of the old version of the arcade. Copy exact styles where appropriate. However, in some cases, the component/page layout may differ from the old arcade, or the old arcade may not have followed best styling practices. In these cases, you may use more appropriate styles as long as the appearance is effectively the same.
