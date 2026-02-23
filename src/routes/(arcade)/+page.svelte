@@ -5,6 +5,7 @@
 	<h1>Damien's Arcade</h1>
 	<nav>
 		<a href="/auction-ttt">Auction Tic-Tac-Toe</a>
+		<a href="/daily-qless">Daily Q-less</a>
 	</nav>
 </div>
 

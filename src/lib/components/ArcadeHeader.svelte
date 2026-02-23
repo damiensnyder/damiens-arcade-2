@@ -1,10 +1,12 @@
 <script lang="ts">
-	let { href, title, tag = null }: { href: string; title: string; tag?: string | null } = $props();
+	import type { Snippet } from 'svelte';
+	let { href, title, tag = null, end = null }: { href: string; title: string; tag?: string | null; end?: Snippet | null } = $props();
 </script>
 
 <header>
 	<a {href}><h1>{title}</h1></a>
 	{#if tag}<span class="tag">{tag}</span>{/if}
+	{#if end}{@render end()}{/if}
 </header>
 
 <style>
