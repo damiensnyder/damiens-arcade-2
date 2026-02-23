@@ -9,6 +9,7 @@
 	import PregamePlayer from '$lib/games/auction-ttt/PregamePlayer.svelte';
 	import SettingsEditor from '$lib/games/auction-ttt/SettingsEditor.svelte';
 	import Instruction from '$lib/games/auction-ttt/Instruction.svelte';
+	import ArcadeHeader from '$lib/components/ArcadeHeader.svelte';
 
 	let { data } = $props();
 
@@ -38,7 +39,6 @@
 	});
 
 	const showBoard = $derived(game.gameStage !== 'pregame');
-	const isDesktop = $derived(false); // Resolved via CSS media query
 </script>
 
 <svelte:head>
@@ -53,11 +53,7 @@
 		</div>
 	{/if}
 
-	<!-- Banner -->
-	<header class="banner">
-		<a href="/auction-ttt"><h1>Auction Tic-Tac-Toe</h1></a>
-		<span class="room-code">{data.roomCode}</span>
-	</header>
+	<ArcadeHeader href="/auction-ttt" title="Auction Tic-Tac-Toe" tag={data.roomCode} />
 
 	<!-- Mobile layout: board/settings → instruction → players -->
 	<div class="mobile-layout">
@@ -133,35 +129,6 @@
 	.error-overlay a {
 		color: var(--text-2);
 		font-size: 1rem;
-	}
-
-	.banner {
-		display: flex;
-		flex-flow: row;
-		position: sticky;
-		top: 0;
-		background-color: var(--bg-1);
-		border-bottom: 1px solid var(--bg-5);
-		padding: 0.5rem 1.5rem;
-		z-index: 10;
-		justify-content: space-between;
-		align-items: center;
-	}
-
-	.banner a {
-		text-decoration: none;
-	}
-
-	.banner h1 {
-		font-size: 1.5rem;
-		margin: 0;
-		text-align: left;
-	}
-
-	.room-code {
-		font-family: var(--font-mono);
-		color: var(--text-4);
-		font-size: 0.9rem;
 	}
 
 	/* Mobile layout (default) */

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { getWsUrl } from '$lib/ws/client.js';
+	import ArcadeHeader from '$lib/components/ArcadeHeader.svelte';
 
 	let joinCode = $state('');
 	let creating = $state(false);
@@ -51,9 +52,7 @@
 </svelte:head>
 
 <div class="page">
-	<header>
-		<a href="/"><h1>Damien's Arcade</h1></a>
-	</header>
+	<ArcadeHeader href="/" title="Damien's Arcade" />
 
 	<div class="content">
 		<div class="left-col">
@@ -107,25 +106,6 @@
 		width: 100%;
 		min-height: 100vh;
 		align-items: stretch;
-	}
-
-	header {
-		position: sticky;
-		top: 0;
-		background-color: var(--bg-1);
-		border-bottom: 1px solid var(--bg-5);
-		padding: 0.5rem 1.5rem;
-		z-index: 10;
-	}
-
-	header a {
-		text-decoration: none;
-	}
-
-	header h1 {
-		font-size: 1.5rem;
-		margin: 0;
-		text-align: left;
 	}
 
 	.content {
