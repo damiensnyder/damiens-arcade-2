@@ -42,7 +42,7 @@
 </script>
 
 <svelte:head>
-	<title>Auction Tic-Tac-Toe — {data.roomCode}</title>
+	<title>Auction Tic-Tac-Toe</title>
 </svelte:head>
 
 <div class="game-page">
@@ -169,7 +169,7 @@
 		display: flex;
 		flex-flow: column;
 		align-items: center;
-		padding: 1.5rem 1rem;
+		padding: 0.75rem 1rem;
 		gap: 0.5rem;
 		flex: 1;
 	}
@@ -186,8 +186,7 @@
 	.player-row {
 		width: 100%;
 		justify-content: space-around;
-		margin-top: 3rem;
-		padding-bottom: 1.5rem;
+		margin-top: 0.5rem;
 	}
 
 	/* Desktop layout */

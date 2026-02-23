@@ -62,7 +62,10 @@
 	{:else if thisSquare === Side.O}
 		<O size={140} />
 	{:else if iMyTurnToBid}
-		<div class="interactive">
+		<!-- Mobile: show pending bid amount (controls live in Instruction area) -->
+		<span class="last-bid bid-mobile">${game.pendingBidAmount}</span>
+		<!-- Desktop: inline bid form -->
+		<div class="interactive bid-desktop">
 			<p>Bid:</p>
 			<div class="form-field">
 				<input type="number" min={game.currentBid + 1} max={maxBid} bind:value={game.pendingBidAmount} />
@@ -73,7 +76,10 @@
 			</div>
 		</div>
 	{:else if isPendingNomination}
-		<div class="interactive">
+		<!-- Mobile: show pending amount (controls live in Instruction area) -->
+		<span class="last-bid bid-mobile">${game.pendingBidAmount}</span>
+		<!-- Desktop: inline starting-bid form -->
+		<div class="interactive bid-desktop">
 			<p>Starting bid:</p>
 			<div class="form-field">
 				<input type="number" min={0} max={maxBid} bind:value={game.pendingBidAmount} />
@@ -97,6 +103,12 @@
 		justify-content: center;
 		align-items: center;
 		background-color: var(--bg-1);
+	}
+
+	/* Scale SVG pieces to fit within the cell on small screens */
+	.outer :global(svg) {
+		max-width: 88%;
+		max-height: 88%;
 	}
 
 	.interactive {
@@ -144,5 +156,14 @@
 
 	input[type='number'] {
 		width: 2.5rem;
+	}
+
+	/* Mobile: show amount in square, hide the inline form */
+	.bid-mobile { display: flex; }
+	.bid-desktop { display: none; }
+
+	@media (min-width: 900px) {
+		.bid-mobile { display: none; }
+		.bid-desktop { display: flex; }
 	}
 </style>

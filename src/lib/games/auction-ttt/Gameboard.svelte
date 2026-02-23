@@ -61,8 +61,8 @@
 	.board {
 		position: relative;
 		display: grid;
-		grid-template-rows: repeat(3, 9rem);
-		grid-template-columns: repeat(3, 9rem);
+		grid-template-rows: repeat(3, min(9rem, calc((100vw - 2.5rem) / 3)));
+		grid-template-columns: repeat(3, min(9rem, calc((100vw - 2.5rem) / 3)));
 		gap: 2px;
 		background-color: var(--text-1);
 	}

@@ -38,11 +38,13 @@
 			<button onclick={() => room.sendAction({ type: 'join', side })}>REPLACE</button>
 		{/if}
 	</div>
-	{#if side === Side.X}
-		<X size={180} />
-	{:else}
-		<O size={180} />
-	{/if}
+	<div class="symbol">
+		{#if side === Side.X}
+			<X size={180} />
+		{:else}
+			<O size={180} />
+		{/if}
+	</div>
 	<span class="money" class:active={isMyTurn}>
 		${player.money}
 		{#if game.settings.useTiebreaker}
@@ -55,6 +57,19 @@
 	.player {
 		position: relative;
 		align-items: center;
+	}
+
+	.symbol {
+		/* Constrain to 40vw on narrow screens so two players fit side by side */
+		width: min(180px, 40vw);
+		height: min(180px, 40vw);
+		align-items: center;
+		justify-content: center;
+	}
+
+	.symbol :global(svg) {
+		width: 100%;
+		height: 100%;
 	}
 
 	.money {
@@ -79,6 +94,12 @@
 
 	.label {
 		color: var(--text-4);
+	}
+
+	@media (max-width: 899px) {
+		.money { margin-top: 0.25rem; }
+		.player-label { min-height: 1.5rem; }
+		.symbol { margin-top: -0.75rem; }
 	}
 
 	/* Desktop: float the label below, keep the symbol on top */
