@@ -10,7 +10,7 @@
 
 	<div class="games">
 		<div class="card horiz">
-			<img src="/thumbnails/auction-ttt.png" alt="Auction Tic-Tac-Toe" class="thumbnail" />
+			<img src="/thumbnails/auction-ttt.svg" alt="Auction Tic-Tac-Toe" class="thumbnail" draggable="false" />
 			<div class="card-body">
 				<div class="card-top horiz">
 					<h2>Auction Tic-Tac-Toe</h2>
@@ -21,7 +21,7 @@
 		</div>
 
 		<div class="card horiz">
-			<img src="/thumbnails/daily-qless.png" alt="Daily Q-less" class="thumbnail" />
+			<img src="/thumbnails/daily-qless.svg" alt="Daily Q-less" class="thumbnail" draggable="false" />
 			<div class="card-body">
 				<div class="card-top horiz">
 					<h2>Daily Q-less</h2>
@@ -68,7 +68,7 @@
 		object-fit: cover;
 		border-radius: 0.75rem;
 		flex-shrink: 0;
-		background-color: var(--bg-2);
+		background-color: var(--bg-1);
 	}
 
 	.card-body {
