@@ -16,6 +16,7 @@
 				Under construction. Mayhem Manager hasn't been ported over from the old version of the
 				arcade site yet.
 			</p>
+			<p><a href="/">Return to homepage</a></p>
 		</div>
 	</div>
 </div>
