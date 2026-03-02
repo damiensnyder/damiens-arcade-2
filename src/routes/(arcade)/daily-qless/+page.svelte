@@ -159,6 +159,7 @@
 	<title>Daily Q-less — Damien's Arcade</title>
 </svelte:head>
 
+<div class="page">
 <ArcadeHeader href="/" title="Daily Q-less">
 	{#snippet end()}
 		<button class="how-to-play-btn" onclick={() => (showInstructions = true)} disabled={showInstructions || showWin}>
@@ -256,6 +257,7 @@
 		</div>
 	</div>
 {/if}
+</div>
 
 <style>
 	:global(.how-to-play-btn) {
@@ -264,9 +266,15 @@
 		font-size: 0.9rem;
 	}
 
+	.page {
+		height: 100dvh;
+		align-items: stretch;
+	}
+
 	.grid-outer {
+		flex: 1;
+		min-height: 0;
 		max-width: 70vw;
-		max-height: 60vh;
 		margin: 2rem auto;
 		overflow: auto;
 		border-radius: 0.75rem;
@@ -303,6 +311,7 @@
 	.filled {
 		background-color: var(--bg-5);
 		cursor: grab;
+		touch-action: none;
 	}
 
 	.touch {
@@ -397,7 +406,6 @@
 	@media only screen and (min-width: 720px) and (max-width: 1200px) {
 		.grid-outer {
 			max-width: 85vw;
-			max-height: 80vh;
 			margin: 1rem auto;
 		}
 	}
@@ -406,21 +414,19 @@
 	@media only screen and (max-width: 720px) {
 		.grid-outer {
 			max-width: 95vw;
-			max-height: 75vh;
 			margin: 0.5rem auto;
 		}
 
 		.grid-inner {
-			/* Shrink tiles slightly on mobile */
 			gap: 0.5rem;
-			grid-template-rows: repeat(11, 2.25rem);
-			grid-template-columns: repeat(12, 2.25rem);
-			font-size: 1.1rem;
+			grid-template-rows: repeat(11, 2.5rem);
+			grid-template-columns: repeat(12, 2.5rem);
+			font-size: 1.2rem;
 		}
 
 		.cell {
-			width: 2.25rem;
-			height: 2.25rem;
+			width: 2.5rem;
+			height: 2.5rem;
 		}
 
 		.dialog {
