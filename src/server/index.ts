@@ -2,7 +2,7 @@ import { createServer } from 'http';
 import { setupWebSocket } from './ws.js';
 
 const isProd = process.env.NODE_ENV === 'production';
-const PORT = isProd ? 3000 : 3001;
+const PORT = parseInt(process.env.PORT ?? (isProd ? '3000' : '3001'));
 
 async function main() {
 	// In production, serve the built SvelteKit app alongside WebSocket
