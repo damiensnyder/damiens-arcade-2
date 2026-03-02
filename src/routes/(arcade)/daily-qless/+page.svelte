@@ -134,7 +134,7 @@
 
 	async function share() {
 		const mins = Math.floor(solveTime / 60);
-		const secs = Math.round(solveTime % 60);
+		const secs = Math.floor(solveTime % 60);
 		const timeStr = solveTime <= 600
 			? `Solved in ${mins}:${secs < 10 ? '0' : ''}${secs}`
 			: 'Solved!';
@@ -228,7 +228,7 @@
 			{#if solveTime < 600}
 				<p>And it only took you</p>
 				<h1 class="solve-time">
-					{Math.floor(solveTime / 60)}:{Math.round(solveTime % 60) < 10 ? '0' : ''}{Math.round(solveTime % 60)}
+					{Math.floor(solveTime / 60)}:{Math.floor(solveTime % 60) < 10 ? '0' : ''}{Math.floor(solveTime % 60)}
 				</h1>
 			{/if}
 
