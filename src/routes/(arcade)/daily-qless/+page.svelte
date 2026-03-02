@@ -7,7 +7,8 @@
 
 	let { data } = $props();
 
-	const { roll, legalWords, dateStr } = data;
+	const { roll, legalWords } = data;
+	const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
 	// Grid state: ROWS × COLS, letters start in a 3×4 block at rows 0-2, cols 4-7
 	let grid = $state<string[][]>(Array.from({ length: ROWS }, () => Array(COLS).fill('')));

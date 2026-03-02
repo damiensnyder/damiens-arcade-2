@@ -38,6 +38,5 @@ export const load: PageServerLoad = async () => {
 	return {
 		roll,
 		legalWords,
-		dateStr: today.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 	};
 };
