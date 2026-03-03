@@ -10,7 +10,6 @@ const DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 
 const EPOCH_MS = Date.UTC(2026, 0, 8);
 
 // One import per file so Vite bundles them as separate lazy chunks.
-// Only the current day's file is loaded at runtime.
 const rollLoaders: Record<string, () => Promise<{ default: RollEntry[] }>> = {
 	sunday:    () => import('$lib/games/qless/rolls-sunday.json'),
 	monday:    () => import('$lib/games/qless/rolls-monday.json'),
@@ -31,12 +30,21 @@ function getRollForDate(rolls: RollEntry[], date: Date): RollEntry {
 }
 
 export const load: PageServerLoad = async () => {
-	const today = new Date();
-	const dayName = DAYS[today.getUTCDay()];
-	const { default: rolls } = await rollLoaders[dayName]();
-	const { roll, legalWords } = getRollForDate(rolls, today);
-	return {
-		roll,
-		legalWords,
-	};
+	const now = Date.now();
+	// Send rolls for yesterday, today, and tomorrow (UTC) so the client can
+	// pick the one matching the user's local date (midnight local time).
+	const dates = [
+		new Date(now - 86_400_000),
+		new Date(now),
+		new Date(now + 86_400_000),
+	];
+
+	const rolls: Record<string, { roll: string; legalWords: string[] }> = {};
+	await Promise.all(dates.map(async (date) => {
+		const dayName = DAYS[date.getUTCDay()];
+		const { default: dayRolls } = await rollLoaders[dayName]();
+		rolls[date.toISOString().slice(0, 10)] = getRollForDate(dayRolls, date);
+	}));
+
+	return { rolls };
 };

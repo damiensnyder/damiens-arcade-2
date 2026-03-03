@@ -7,14 +7,15 @@
 
 	let { data } = $props();
 
-	const { roll, legalWords } = data;
-	const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+	// Roll and date are determined client-side in onMount so the correct
+	// local date (not UTC) is used. Grid init also lives in onMount to avoid
+	// SSR hydration mismatches when the user's timezone differs from UTC.
+	let roll = $state('');
+	let legalWords = $state<string[]>([]);
+	let dateStr = $state('');
 
 	// Grid state: ROWS × COLS, letters start in a 3×4 block at rows 0-2, cols 4-7
 	let grid = $state<string[][]>(Array.from({ length: ROWS }, () => Array(COLS).fill('')));
-	grid[0].splice(4, 4, ...roll.substring(0, 4).split(''));
-	grid[1].splice(4, 4, ...roll.substring(4, 8).split(''));
-	grid[2].splice(4, 4, ...roll.substring(8, 12).split(''));
 
 	// shownGrid is what's rendered — differs from grid during a drag preview
 	let shownGrid = $state<string[][]>(grid.map((row) => row.slice()));
@@ -38,6 +39,22 @@
 	let badges = $state<Badge[]>([]);
 
 	onMount(() => {
+		// Determine local date string (YYYY-MM-DD using local time, not UTC)
+		const localDate = new Date();
+		const localDateStr = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
+		// Pick the roll for today's local date; fall back to UTC today (middle entry)
+		const sortedEntries = Object.entries(data.rolls).sort(([a], [b]) => a < b ? -1 : 1);
+		const entry = data.rolls[localDateStr] ?? sortedEntries[1]?.[1] ?? sortedEntries[0]?.[1];
+		roll = entry.roll;
+		legalWords = entry.legalWords;
+		dateStr = localDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
+		// Place letters in a 3×4 block at rows 0-2, cols 4-7
+		grid[0].splice(4, 4, ...roll.substring(0, 4).split(''));
+		grid[1].splice(4, 4, ...roll.substring(4, 8).split(''));
+		grid[2].splice(4, 4, ...roll.substring(8, 12).split(''));
+		shownGrid = grid.map((row) => row.slice());
+
 		words = getAllWords(grid);
 		checkForWin();
 		// Scroll the initial letter cluster into view
@@ -143,11 +160,13 @@
 			? '\nBadges: ' + badges.map((b) => `${b.name} ${b.icon}`).join(', ')
 			: '';
 		const text = `Daily Q-less for ${dateStr}\n${timeStr}${badgeStr}`;
+		const url = window.location.origin + window.location.pathname;
 		try {
-			if (navigator.canShare?.({ text })) {
-				await navigator.share({ text, title: 'Daily Q-less solution' });
+			const shareData = { text, url, title: 'Daily Q-less' };
+			if (navigator.canShare?.(shareData)) {
+				await navigator.share(shareData);
 			} else {
-				await navigator.clipboard.writeText(text);
+				await navigator.clipboard.writeText(`${url}\n${text}`);
 			}
 		} catch {
 			// ignore
