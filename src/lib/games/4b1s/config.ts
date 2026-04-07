@@ -19,3 +19,4 @@ export const FRICTION          = 0.97;  // velocity multiplier per frame while o
 export const FRICTION_S        = 0.94;  // stronger friction when S held on platform
 export const FALL_ACCEL        = 0.2;   // extra downward accel when S held (airborne)
 export const FALL_DECEL        = 0.15;  // gravity reduction when W held (airborne)
+export const DOUBLE_JUMP_CARRY = 0.4;   // fraction of existing upward velocity preserved on double jump

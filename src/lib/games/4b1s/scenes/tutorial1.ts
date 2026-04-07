@@ -1,4 +1,4 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, Text } from 'pixi.js';
 import type { Application } from 'pixi.js';
 import {
 	VIRTUAL_W,
@@ -15,6 +15,7 @@ import {
 	FRICTION_S,
 	FALL_ACCEL,
 	FALL_DECEL,
+	DOUBLE_JUMP_CARRY,
 } from '../config.js';
 
 // Height and centroid offsets of the equilateral triangle
@@ -37,6 +38,8 @@ export class Tutorial1 extends Container {
 	private onGround = false;
 
 	private keys = new Set<string>();
+	private wJustPressed = false;
+	private canDoubleJump = true;
 	private tickerFn: () => void;
 	private keydownFn: (e: KeyboardEvent) => void;
 	private keyupFn:   (e: KeyboardEvent) => void;
@@ -52,6 +55,23 @@ export class Tutorial1 extends Container {
 			.fill(0x000000);
 		this.addChild(platform);
 
+		// ── Instruction text ──────────────────────────────────────────────────
+		const label = new Text({
+			text: 'Use WASD to move',
+			style: { fontFamily: 'Helvetica', fontSize: 60, fill: 0x001100 },
+		});
+		label.anchor.set(0.5, 0.5);
+		label.position.set(VIRTUAL_W / 2, VIRTUAL_H / 2 - 180);
+		this.addChild(label);
+
+		const label2 = new Text({
+			text: 'Press W twice to double jump',
+			style: { fontFamily: 'Helvetica', fontSize: 60, fill: 0x001100 },
+		});
+		label2.anchor.set(0.5, 0.5);
+		label2.position.set(VIRTUAL_W / 2, VIRTUAL_H / 2 - 100);
+		this.addChild(label2);
+
 		// ── Player triangle ───────────────────────────────────────────────────
 		// Equilateral triangle, origin at centroid, tip pointing up.
 		// Vertices: top tip, bottom-left, bottom-right.
@@ -66,8 +86,11 @@ export class Tutorial1 extends Container {
 		this.addChild(this.player);
 
 		// ── Input ─────────────────────────────────────────────────────────────
-		this.keydownFn = (e) => this.keys.add(e.code);
-		this.keyupFn   = (e) => this.keys.delete(e.code);
+		this.keydownFn = (e) => {
+			this.keys.add(e.code);
+			if (e.code === 'KeyW' && !e.repeat) this.wJustPressed = true;
+		};
+		this.keyupFn = (e) => this.keys.delete(e.code);
 		window.addEventListener('keydown', this.keydownFn);
 		window.addEventListener('keyup',   this.keyupFn);
 
@@ -83,6 +106,7 @@ export class Tutorial1 extends Container {
 		this.vx = 0;
 		this.vy = 0;
 		this.onGround = true;
+		this.canDoubleJump = true;
 	}
 
 	private tick(): void {
@@ -117,16 +141,26 @@ export class Tutorial1 extends Container {
 			this.py = PLATFORM_Y - TRI_BOTTOM_OFFSET;
 			this.vy = 0;
 			this.onGround = true;
+			this.canDoubleJump = true;
 			this.vx *= s ? FRICTION_S : FRICTION;
 
 			// Jump
-			if (w) {
+			if (this.wJustPressed) {
 				this.vy = JUMP_VELOCITY;
 				this.onGround = false;
+				this.canDoubleJump = true;
 			}
 		} else {
 			this.onGround = false;
+
+			// Double jump
+			if (this.wJustPressed && this.canDoubleJump) {
+				this.vy = JUMP_VELOCITY + this.vy * DOUBLE_JUMP_CARRY;
+				this.canDoubleJump = false;
+			}
 		}
+
+		this.wJustPressed = false;
 
 		// ── Respawn if fully off-screen below ─────────────────────────────────
 		if (this.py > VIRTUAL_H + 200) {
