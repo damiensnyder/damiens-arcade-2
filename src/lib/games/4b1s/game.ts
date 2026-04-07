@@ -12,7 +12,7 @@ export class Game {
 	async init(): Promise<void> {
 		this.app = new Application();
 		await this.app.init({
-			background: 0xffffff,
+			background: 0x44505b,
 			width: VIRTUAL_W,
 			height: (VIRTUAL_W * 9) / 16,
 			antialias: true,

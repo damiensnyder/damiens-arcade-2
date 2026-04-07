@@ -78,6 +78,7 @@
 	}
 
 	.header {
+		width: 100%;
 		height: 3rem;
 		flex-shrink: 0;
 		display: flex;
@@ -91,8 +92,8 @@
 
 	.header a {
 		font-size: 1.5rem;
-		font-family: var(--font-subtitle);
-		color: var(--text-2);
+		font-family: var(--font-title);
+		color: var(--accent-1);
 		text-decoration: none;
 	}
 
