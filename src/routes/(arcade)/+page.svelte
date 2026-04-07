@@ -30,6 +30,17 @@
 				<p>A daily puzzle based on the word game Q-less. Arrange all your tiles into interlocking words. Guaranteed solvable every day.</p>
 			</div>
 		</div>
+
+		<div class="card horiz">
+			<img src="/thumbnails/4b1s.svg" alt="4 Birds 1 Scone" class="thumbnail" draggable="false" />
+			<div class="card-body">
+				<div class="card-top horiz">
+					<h2>4 Birds 1 Scone</h2>
+					<a href="/4b1s" class="play-btn">Play Now</a>
+				</div>
+				<p>A work in progress.</p>
+			</div>
+		</div>
 	</div>
 </div>
 

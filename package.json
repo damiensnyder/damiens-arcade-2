@@ -12,6 +12,7 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
 	},
 	"dependencies": {
+		"pixi.js": "^8.17.1",
 		"ws": "^8.18.0",
 		"zod": "^3.24.1"
 	},
