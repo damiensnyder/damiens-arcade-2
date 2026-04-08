@@ -23,7 +23,9 @@ export const SCONE_GRAVITY   = 0.75; // px/frame² (same as base gravity in 2b1s
 export const MAX_THROW_SPEED = 28;   // px/frame cap — limits max height to ~half screen above player
 
 // ── Targets (birds) ───────────────────────────────────────────────────────────
-export const TARGET_RADIUS = 50;    // px
+export const TARGET_RADIUS         = 50;  // px
+export const TARGET_SHRINK_RATE    = 5;   // px radius per second (phase 3)
+export const TARGET_SPAWN_INTERVAL = 60;  // frames between phase 3 spawns
 
 // ── Colors ────────────────────────────────────────────────────────────────────
 export const COLOR_BACKGROUND  = 0x334455;

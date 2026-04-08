@@ -15,6 +15,8 @@ import {
 	SCONE_GRAVITY,
 	MAX_THROW_SPEED,
 	TARGET_RADIUS,
+	TARGET_SHRINK_RATE,
+	TARGET_SPAWN_INTERVAL,
 	COLOR_PLATFORM,
 	COLOR_PLAYER,
 	COLOR_SCONE,
@@ -23,18 +25,19 @@ import {
 	COLOR_LABEL,
 } from '../config.js';
 
-const TRI_TOP_OFFSET    = (PLAYER_SIZE * 2) / 3; // centroid to tip (up)
-const TRI_BOTTOM_OFFSET = PLAYER_SIZE / 3;        // centroid to base (down)
+const TRI_TOP_OFFSET    = (PLAYER_SIZE * 2) / 3;
+const TRI_BOTTOM_OFFSET = PLAYER_SIZE / 3;
 
 const PLATFORM_LEFT  = VIRTUAL_W / 2 - PLATFORM_W / 2;
 const PLATFORM_RIGHT = VIRTUAL_W / 2 + PLATFORM_W / 2;
 
-// Phase 2 target (bird) positions in virtual coords
-const TARGET_POSITIONS = [
+const PHASE2_TARGET_POSITIONS = [
 	{ x: 480,  y: 480 },
 	{ x: 960,  y: 320 },
 	{ x: 1440, y: 480 },
 ];
+
+const SHRINK_PER_FRAME = TARGET_SHRINK_RATE / 60;
 
 interface Scone {
 	x: number;
@@ -48,6 +51,9 @@ interface Scone {
 interface Target {
 	x: number;
 	y: number;
+	rawRadius: number;
+	displayRadius: number;
+	shrinks: boolean;
 	gfx: Graphics;
 }
 
@@ -82,7 +88,9 @@ export class Tutorial1 extends Container {
 	private phase = 1;
 	private hasDoubleJumped = false;
 	private hasMovedLaterally = false;
-	private phase2Countdown: number | null = null; // frames remaining
+	private phase2Countdown: number | null = null;
+	private phase3Countdown: number | null = null;
+	private phase3SpawnTimer = 0;
 
 	private keys = new Set<string>();
 	private wJustPressed = false;
@@ -180,7 +188,6 @@ export class Tutorial1 extends Container {
 		window.addEventListener('mousemove', this.mousemoveFn);
 		window.addEventListener('mouseup',   this.mouseupFn);
 
-		// ── Start ─────────────────────────────────────────────────────────────
 		this.spawn();
 		this.tickerFn = () => this.tick();
 		app.ticker.add(this.tickerFn);
@@ -195,8 +202,6 @@ export class Tutorial1 extends Container {
 	}
 
 	private getAimParams(): { angle: number; speed: number } {
-		// Angle from virtual coords (so it maps correctly to the game world).
-		// Speed from raw client px / 20, matching 2b1s screen-pixel behaviour.
 		const vdx = this.aimStartVX - this.aimCurrentVX;
 		const vdy = this.aimStartVY - this.aimCurrentVY;
 		const rdx = this.aimStartRawX - this.aimCurrentRawX;
@@ -221,27 +226,35 @@ export class Tutorial1 extends Container {
 			gfx,
 		};
 		gfx.position.set(scone.x, scone.y);
-		// Insert before trajectoryGfx so trajectory stays on top
 		this.addChildAt(gfx, this.children.indexOf(this.trajectoryGfx));
 		this.scones.push(scone);
 	}
 
-	private spawnTargets(): void {
-		for (const pos of TARGET_POSITIONS) {
-			const gfx = new Graphics();
-			gfx.circle(0, 0, TARGET_RADIUS).fill(COLOR_TARGET);
-			gfx.position.set(pos.x, pos.y);
-			// Insert before trajectoryGfx so trajectory stays on top
-			this.addChildAt(gfx, this.children.indexOf(this.trajectoryGfx));
-			this.targets.push({ x: pos.x, y: pos.y, gfx });
-		}
+	private addTarget(x: number, y: number, shrinks: boolean): void {
+		const gfx = new Graphics();
+		gfx.circle(0, 0, TARGET_RADIUS).fill(COLOR_TARGET);
+		gfx.position.set(x, y);
+		this.addChildAt(gfx, this.children.indexOf(this.trajectoryGfx));
+		this.targets.push({ x, y, rawRadius: TARGET_RADIUS, displayRadius: TARGET_RADIUS, shrinks, gfx });
+	}
+
+	private spawnPhase3Target(): void {
+		const x = 200 + Math.random() * (VIRTUAL_W - 400);
+		const y = 100 + Math.random() * 700;
+		this.addTarget(x, y, true);
 	}
 
 	private startPhase2(): void {
 		this.phase = 2;
 		this.label1.text = 'Click and drag to throw scones to the birds';
 		this.label2.visible = false;
-		this.spawnTargets();
+		for (const pos of PHASE2_TARGET_POSITIONS) this.addTarget(pos.x, pos.y, false);
+	}
+
+	private startPhase3(): void {
+		this.phase = 3;
+		this.label1.text = 'You can feed many birds with 1 scone';
+		this.phase3SpawnTimer = TARGET_SPAWN_INTERVAL;
 	}
 
 	private spawn(): void {
@@ -287,7 +300,7 @@ export class Tutorial1 extends Container {
 
 		// ── Jump ──────────────────────────────────────────────────────────────
 		if (this.wJustPressed && this.jumps > 0) {
-			if (this.jumps === 1) this.hasDoubleJumped = true; // second jump
+			if (this.jumps === 1) this.hasDoubleJumped = true;
 			this.vy = JUMP_VELOCITY;
 			this.jumps--;
 		}
@@ -299,26 +312,59 @@ export class Tutorial1 extends Container {
 		// ── Sync player sprite ────────────────────────────────────────────────
 		this.player.position.set(this.px, this.py);
 
-		// ── Phase 1 → 2 progression ───────────────────────────────────────────
+		// ── Phase transitions ─────────────────────────────────────────────────
 		if (this.phase === 1 && this.hasDoubleJumped && this.hasMovedLaterally) {
 			if (this.phase2Countdown === null) {
-				this.phase2Countdown = 120; // 2 seconds at 60fps
+				this.phase2Countdown = 120;
 			} else if (--this.phase2Countdown <= 0) {
 				this.startPhase2();
 			}
 		}
 
-		// ── Update scones ─────────────────────────────────────────────────────
+		if (this.phase === 2 && this.targets.length === 0) {
+			if (this.phase3Countdown === null) {
+				this.phase3Countdown = 60;
+			} else if (--this.phase3Countdown <= 0) {
+				this.startPhase3();
+			}
+		}
+
+		// ── Phase 3 spawning ──────────────────────────────────────────────────
+		if (this.phase === 3) {
+			if (++this.phase3SpawnTimer >= TARGET_SPAWN_INTERVAL) {
+				this.phase3SpawnTimer = 0;
+				this.spawnPhase3Target();
+			}
+		}
+
+		// ── Update scones & targets ───────────────────────────────────────────
+		this.updateTargets();
 		this.updateScones();
 
 		// ── Draw trajectory ───────────────────────────────────────────────────
 		this.drawTrajectory();
 	}
 
+	private updateTargets(): void {
+		const dead: Target[] = [];
+		for (const target of this.targets) {
+			if (target.shrinks) {
+				target.rawRadius -= SHRINK_PER_FRAME;
+				target.displayRadius += (target.rawRadius - target.displayRadius) * 0.15;
+				if (target.rawRadius <= 0) {
+					dead.push(target);
+					continue;
+				}
+				target.gfx.clear().circle(0, 0, target.displayRadius).fill(COLOR_TARGET);
+			}
+		}
+		for (const target of dead) this.removeChild(target.gfx);
+		this.targets = this.targets.filter(t => !dead.includes(t));
+	}
+
 	private updateScones(): void {
 		const dead: Scone[] = [];
 		for (const scone of this.scones) {
-			// Physics matching 2b1s: horizontal is constant, vertical uses accumulated gravity
 			scone.accGravity += SCONE_GRAVITY;
 			scone.x += Math.cos(scone.angle) * scone.speed;
 			scone.y += -Math.sin(scone.angle) * scone.speed + scone.accGravity;
@@ -332,7 +378,7 @@ export class Tutorial1 extends Container {
 			for (const target of [...this.targets]) {
 				const dx = scone.x - target.x;
 				const dy = scone.y - target.y;
-				if (Math.sqrt(dx * dx + dy * dy) < SCONE_RADIUS + TARGET_RADIUS) {
+				if (Math.sqrt(dx * dx + dy * dy) < SCONE_RADIUS + target.displayRadius) {
 					this.removeChild(target.gfx);
 					this.targets = this.targets.filter(t => t !== target);
 				}
