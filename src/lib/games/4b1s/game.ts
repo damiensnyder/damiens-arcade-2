@@ -1,5 +1,5 @@
 import { Application, type Container } from 'pixi.js';
-import { VIRTUAL_W } from './config.js';
+import { VIRTUAL_W, COLOR_BACKGROUND } from './config.js';
 
 interface Scene extends Container {
 	cleanup?(): void;
@@ -12,7 +12,7 @@ export class Game {
 	async init(): Promise<void> {
 		this.app = new Application();
 		await this.app.init({
-			background: 0x505b68,
+			background: COLOR_BACKGROUND,
 			width: VIRTUAL_W,
 			height: (VIRTUAL_W * 9) / 16,
 			antialias: true,

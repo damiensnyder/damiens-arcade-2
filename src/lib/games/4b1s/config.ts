@@ -3,20 +3,33 @@ export const VIRTUAL_W = 1920;
 export const VIRTUAL_H = 1080;
 
 // ── Platform ──────────────────────────────────────────────────────────────────
-export const PLATFORM_W = 960;
-export const PLATFORM_H = 40;
-export const PLATFORM_Y = 1040; // top edge Y of platform (platform is centered horizontally)
+export const PLATFORM_W = 800;
+export const PLATFORM_H = 30;
+export const PLATFORM_Y = VIRTUAL_H - PLATFORM_H; // top edge Y (flush with bottom)
 
-// ── Player (equilateral triangle) ─────────────────────────────────────────────
-export const PLAYER_SIDE = 60;
+// ── Player ────────────────────────────────────────────────────────────────────
+// Isosceles triangle with 60×60 bounding box (matching 2b1s.py)
+export const PLAYER_SIZE = 60;
 
-// ── Physics (virtual pixels per frame, assuming 60 fps) ───────────────────────
-export const GRAVITY           = 0.4;   // px/frame² downward acceleration
-export const JUMP_VELOCITY     = -16;   // px/frame upward on W press
-export const MOVE_ACCEL        = 0.7;   // px/frame² lateral acceleration (A/D)
-export const MAX_LATERAL_SPEED = 12;    // px/frame lateral speed cap
-export const FRICTION          = 0.97;  // velocity multiplier per frame while on platform
-export const FRICTION_S        = 0.94;  // stronger friction when S held on platform
-export const FALL_ACCEL        = 0.2;   // extra downward accel when S held (airborne)
-export const FALL_DECEL        = 0.15;  // gravity reduction when W held (airborne)
-export const DOUBLE_JUMP_CARRY = 0.4;   // fraction of existing upward velocity preserved on double jump
+// ── Physics (virtual pixels per frame at 60 fps) ──────────────────────────────
+export const GRAVITY_FREE  = 2.25;  // px/frame² when W is not held (GRAVITY * 3 from 2b1s)
+export const GRAVITY_HELD  = 0.75;  // px/frame² when W is held
+export const JUMP_VELOCITY = -22.5; // px/frame upward on W press
+export const MOVE_SPEED    = 15;    // px/frame lateral speed (set directly, no acceleration)
+
+// ── Scones (projectiles) ──────────────────────────────────────────────────────
+export const SCONE_RADIUS    = 8;    // px
+export const SCONE_GRAVITY   = 0.75; // px/frame² (same as base gravity in 2b1s)
+export const MAX_THROW_SPEED = 28;   // px/frame cap — limits max height to ~half screen above player
+
+// ── Targets (birds) ───────────────────────────────────────────────────────────
+export const TARGET_RADIUS = 50;    // px
+
+// ── Colors ────────────────────────────────────────────────────────────────────
+export const COLOR_BACKGROUND  = 0x334455;
+export const COLOR_PLATFORM    = 0x000000;
+export const COLOR_PLAYER      = 0x000000;
+export const COLOR_SCONE       = 0x000000;
+export const COLOR_TRAJECTORY  = 0xaaaaaa;
+export const COLOR_TARGET      = 0x00cc00;
+export const COLOR_LABEL       = 0x001100;
