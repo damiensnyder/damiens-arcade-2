@@ -27,11 +27,21 @@ export const TARGET_RADIUS         = 50;  // px
 export const TARGET_SHRINK_RATE    = 5;   // px radius per second (phase 3)
 export const TARGET_SPAWN_INTERVAL = 60;  // frames between phase 3 spawns
 
+// ── Health bar ────────────────────────────────────────────────────────────────
+export const HEALTH_MAX              = 100;
+export const HEALTH_DRAIN_RATE       = 5;    // per second during normal play
+export const HEALTH_DRAIN_RATE_SLOMO = 15;   // per second while slo-mo is held
+export const HEALTH_FROM_BIRD        = 20;   // restored per bird fed
+export const HEALTH_BAR_HEIGHT       = 40;   // px (virtual)
+export const SLOMO_FACTOR            = 0.5;  // time scale while right-click held
+
 // ── Colors ────────────────────────────────────────────────────────────────────
 export const COLOR_BACKGROUND  = 0x334455;
 export const COLOR_PLATFORM    = 0x000000;
 export const COLOR_PLAYER      = 0x000000;
 export const COLOR_SCONE       = 0x000000;
-export const COLOR_TRAJECTORY  = 0xaaaaaa;
-export const COLOR_TARGET      = 0x00cc00;
-export const COLOR_LABEL       = 0x001100;
+export const COLOR_TRAJECTORY    = 0xaaaaaa;
+export const COLOR_TARGET        = 0x00cc00;
+export const COLOR_LABEL         = 0x001100;
+export const COLOR_HEALTH_HIGH   = 0x00ffff; // cyan when full
+export const COLOR_HEALTH_LOW    = 0xff0000; // red when empty

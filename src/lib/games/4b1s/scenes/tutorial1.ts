@@ -17,12 +17,20 @@ import {
 	TARGET_RADIUS,
 	TARGET_SHRINK_RATE,
 	TARGET_SPAWN_INTERVAL,
+	HEALTH_MAX,
+	HEALTH_DRAIN_RATE,
+	HEALTH_DRAIN_RATE_SLOMO,
+	HEALTH_FROM_BIRD,
+	HEALTH_BAR_HEIGHT,
+	SLOMO_FACTOR,
 	COLOR_PLATFORM,
 	COLOR_PLAYER,
 	COLOR_SCONE,
 	COLOR_TRAJECTORY,
 	COLOR_TARGET,
 	COLOR_LABEL,
+	COLOR_HEALTH_HIGH,
+	COLOR_HEALTH_LOW,
 } from '../config.js';
 
 const TRI_TOP_OFFSET    = (PLAYER_SIZE * 2) / 3;
@@ -38,6 +46,18 @@ const PHASE2_TARGET_POSITIONS = [
 ];
 
 const SHRINK_PER_FRAME = TARGET_SHRINK_RATE / 60;
+const HEALTH_DRAIN_PER_FRAME      = HEALTH_DRAIN_RATE / 60;
+const HEALTH_DRAIN_SLOMO_PER_FRAME = HEALTH_DRAIN_RATE_SLOMO / 60;
+
+function lerpColor(a: number, b: number, t: number): number {
+	const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+	const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+	return (
+		(Math.round(ar + (br - ar) * t) << 16) |
+		(Math.round(ag + (bg - ag) * t) << 8) |
+		 Math.round(ab + (bb - ab) * t)
+	);
+}
 
 interface Scone {
 	x: number;
@@ -45,6 +65,7 @@ interface Scone {
 	angle: number;
 	speed: number;
 	accGravity: number;
+	hits: number;
 	gfx: Graphics;
 }
 
@@ -61,6 +82,7 @@ export class Tutorial1 extends Container {
 	private app: Application;
 	private player: Graphics;
 	private trajectoryGfx: Graphics;
+	private healthBarGfx: Graphics;
 	private label1: Text;
 	private label2: Text;
 
@@ -71,7 +93,7 @@ export class Tutorial1 extends Container {
 	private vy = 0;
 	private jumps = 2;
 
-	// Throwing state — virtual coords for angle, raw client px for speed
+	// Throwing/aiming — virtual coords for angle, raw client px for speed
 	private aiming = false;
 	private aimStartVX = 0;
 	private aimStartVY = 0;
@@ -84,13 +106,22 @@ export class Tutorial1 extends Container {
 	private scones: Scone[] = [];
 	private targets: Target[] = [];
 
+	// Time scale (slo-mo)
+	private timeScale = 1.0;
+	private slomo = false;
+
+	// Health (phase 4)
+	private health = HEALTH_MAX;
+
 	// Phase progression
 	private phase = 1;
 	private hasDoubleJumped = false;
 	private hasMovedLaterally = false;
 	private phase2Countdown: number | null = null;
 	private phase3Countdown: number | null = null;
+	private phase4Countdown: number | null = null;
 	private phase3SpawnTimer = 0;
+	private multiBirdScone = false; // set true when one scone hits 2+ birds
 
 	private keys = new Set<string>();
 	private wJustPressed = false;
@@ -103,6 +134,7 @@ export class Tutorial1 extends Container {
 	private mousedownFn: (e: MouseEvent) => void;
 	private mousemoveFn: (e: MouseEvent) => void;
 	private mouseupFn:   (e: MouseEvent) => void;
+	private contextmenuFn: (e: MouseEvent) => void;
 
 	constructor(app: Application) {
 		super();
@@ -141,9 +173,13 @@ export class Tutorial1 extends Container {
 			.fill(COLOR_PLAYER);
 		this.addChild(this.player);
 
-		// ── Trajectory overlay (always on top) ────────────────────────────────
+		// ── Overlays (always on top) ──────────────────────────────────────────
 		this.trajectoryGfx = new Graphics();
 		this.addChild(this.trajectoryGfx);
+
+		this.healthBarGfx = new Graphics();
+		this.healthBarGfx.visible = false;
+		this.addChild(this.healthBarGfx);
 
 		// ── Input ─────────────────────────────────────────────────────────────
 		this.keydownFn = (e) => {
@@ -156,17 +192,20 @@ export class Tutorial1 extends Container {
 		this.keyupFn = (e) => this.keys.delete(e.code);
 
 		this.mousedownFn = (e) => {
-			if (e.button !== 0) return;
-			const pos = this.toVirtual(e.clientX, e.clientY);
-			this.aimStartVX = pos.x;
-			this.aimStartVY = pos.y;
-			this.aimCurrentVX = pos.x;
-			this.aimCurrentVY = pos.y;
-			this.aimStartRawX = e.clientX;
-			this.aimStartRawY = e.clientY;
-			this.aimCurrentRawX = e.clientX;
-			this.aimCurrentRawY = e.clientY;
-			this.aiming = true;
+			if (e.button === 0) {
+				const pos = this.toVirtual(e.clientX, e.clientY);
+				this.aimStartVX = pos.x;
+				this.aimStartVY = pos.y;
+				this.aimCurrentVX = pos.x;
+				this.aimCurrentVY = pos.y;
+				this.aimStartRawX = e.clientX;
+				this.aimStartRawY = e.clientY;
+				this.aimCurrentRawX = e.clientX;
+				this.aimCurrentRawY = e.clientY;
+				this.aiming = true;
+			} else if (e.button === 2 && this.phase >= 4) {
+				this.slomo = true;
+			}
 		};
 		this.mousemoveFn = (e) => {
 			if (!this.aiming) return;
@@ -177,16 +216,21 @@ export class Tutorial1 extends Container {
 			this.aimCurrentRawY = e.clientY;
 		};
 		this.mouseupFn = (e) => {
-			if (e.button !== 0 || !this.aiming) return;
-			this.aiming = false;
-			this.fireScone();
+			if (e.button === 0 && this.aiming) {
+				this.aiming = false;
+				this.fireScone();
+			} else if (e.button === 2) {
+				this.slomo = false;
+			}
 		};
+		this.contextmenuFn = (e) => e.preventDefault();
 
-		window.addEventListener('keydown', this.keydownFn);
-		window.addEventListener('keyup',   this.keyupFn);
-		window.addEventListener('mousedown', this.mousedownFn);
-		window.addEventListener('mousemove', this.mousemoveFn);
-		window.addEventListener('mouseup',   this.mouseupFn);
+		window.addEventListener('keydown',     this.keydownFn);
+		window.addEventListener('keyup',       this.keyupFn);
+		window.addEventListener('mousedown',   this.mousedownFn);
+		window.addEventListener('mousemove',   this.mousemoveFn);
+		window.addEventListener('mouseup',     this.mouseupFn);
+		window.addEventListener('contextmenu', this.contextmenuFn);
 
 		this.spawn();
 		this.tickerFn = () => this.tick();
@@ -223,6 +267,7 @@ export class Tutorial1 extends Container {
 			angle,
 			speed,
 			accGravity: 0,
+			hits: 0,
 			gfx,
 		};
 		gfx.position.set(scone.x, scone.y);
@@ -257,6 +302,16 @@ export class Tutorial1 extends Container {
 		this.phase3SpawnTimer = TARGET_SPAWN_INTERVAL;
 	}
 
+	private startPhase4(): void {
+		this.phase = 4;
+		this.health = HEALTH_MAX;
+		this.label1.text = 'Feed birds to replenish your health';
+		this.label2.text = 'Right click to enter slo-mo';
+		this.label2.visible = true;
+		this.healthBarGfx.visible = true;
+		this.drawHealthBar();
+	}
+
 	private spawn(): void {
 		this.px = VIRTUAL_W / 2;
 		this.py = PLATFORM_Y - TRI_BOTTOM_OFFSET;
@@ -266,6 +321,9 @@ export class Tutorial1 extends Container {
 	}
 
 	private tick(): void {
+		this.timeScale = this.slomo ? SLOMO_FACTOR : 1.0;
+		const ts = this.timeScale;
+
 		const w = this.keys.has('KeyW');
 		const a = this.keys.has('KeyA');
 		const d = this.keys.has('KeyD');
@@ -282,12 +340,10 @@ export class Tutorial1 extends Container {
 		}
 		if (a || d) this.hasMovedLaterally = true;
 
-		// ── Gravity ───────────────────────────────────────────────────────────
-		this.vy += w ? GRAVITY_HELD : GRAVITY_FREE;
-
-		// ── Integrate ─────────────────────────────────────────────────────────
-		this.px += this.vx;
-		this.py += this.vy;
+		// ── Gravity & integration ─────────────────────────────────────────────
+		this.vy += (w ? GRAVITY_HELD : GRAVITY_FREE) * ts;
+		this.px += this.vx * ts;
+		this.py += this.vy * ts;
 
 		// ── Platform collision ────────────────────────────────────────────────
 		const playerBottom = this.py + TRI_BOTTOM_OFFSET;
@@ -329,27 +385,52 @@ export class Tutorial1 extends Container {
 			}
 		}
 
+		if (this.phase === 3 && this.multiBirdScone) {
+			if (this.phase4Countdown === null) {
+				this.phase4Countdown = 60;
+			} else if (--this.phase4Countdown <= 0) {
+				this.startPhase4();
+			}
+		}
+
 		// ── Phase 3 spawning ──────────────────────────────────────────────────
-		if (this.phase === 3) {
+		if (this.phase === 3 || this.phase === 4) {
 			if (++this.phase3SpawnTimer >= TARGET_SPAWN_INTERVAL) {
 				this.phase3SpawnTimer = 0;
 				this.spawnPhase3Target();
 			}
 		}
 
-		// ── Update scones & targets ───────────────────────────────────────────
-		this.updateTargets();
-		this.updateScones();
+		// ── Health (phase 4) ──────────────────────────────────────────────────
+		if (this.phase === 4) {
+			const drain = this.slomo ? HEALTH_DRAIN_SLOMO_PER_FRAME : HEALTH_DRAIN_PER_FRAME;
+			this.health = Math.max(0, this.health - drain);
+			if (this.health <= 0) {
+				// Respawn and restart
+				for (const t of this.targets) this.removeChild(t.gfx);
+				for (const s of this.scones)  this.removeChild(s.gfx);
+				this.targets = [];
+				this.scones  = [];
+				this.health  = HEALTH_MAX;
+				this.phase3SpawnTimer = TARGET_SPAWN_INTERVAL;
+				this.spawn();
+			}
+			this.drawHealthBar();
+		}
+
+		// ── Update targets & scones ───────────────────────────────────────────
+		this.updateTargets(ts);
+		this.updateScones(ts);
 
 		// ── Draw trajectory ───────────────────────────────────────────────────
 		this.drawTrajectory();
 	}
 
-	private updateTargets(): void {
+	private updateTargets(ts: number): void {
 		const dead: Target[] = [];
 		for (const target of this.targets) {
 			if (target.shrinks) {
-				target.rawRadius -= SHRINK_PER_FRAME;
+				target.rawRadius -= SHRINK_PER_FRAME * ts;
 				target.displayRadius += (target.rawRadius - target.displayRadius) * 0.15;
 				if (target.rawRadius <= 0) {
 					dead.push(target);
@@ -362,12 +443,12 @@ export class Tutorial1 extends Container {
 		this.targets = this.targets.filter(t => !dead.includes(t));
 	}
 
-	private updateScones(): void {
+	private updateScones(ts: number): void {
 		const dead: Scone[] = [];
 		for (const scone of this.scones) {
-			scone.accGravity += SCONE_GRAVITY;
-			scone.x += Math.cos(scone.angle) * scone.speed;
-			scone.y += -Math.sin(scone.angle) * scone.speed + scone.accGravity;
+			scone.accGravity += SCONE_GRAVITY * ts;
+			scone.x += Math.cos(scone.angle) * scone.speed * ts;
+			scone.y += (-Math.sin(scone.angle) * scone.speed + scone.accGravity) * ts;
 			scone.gfx.position.set(scone.x, scone.y);
 
 			if (scone.x < -100 || scone.x > VIRTUAL_W + 100 || scone.y > VIRTUAL_H + 100) {
@@ -379,6 +460,9 @@ export class Tutorial1 extends Container {
 				const dx = scone.x - target.x;
 				const dy = scone.y - target.y;
 				if (Math.sqrt(dx * dx + dy * dy) < SCONE_RADIUS + target.displayRadius) {
+					scone.hits++;
+					if (scone.hits >= 2) this.multiBirdScone = true;
+					if (this.phase === 4) this.health = Math.min(HEALTH_MAX, this.health + HEALTH_FROM_BIRD);
 					this.removeChild(target.gfx);
 					this.targets = this.targets.filter(t => t !== target);
 				}
@@ -386,6 +470,16 @@ export class Tutorial1 extends Container {
 		}
 		for (const scone of dead) this.removeChild(scone.gfx);
 		this.scones = this.scones.filter(s => !dead.includes(s));
+	}
+
+	private drawHealthBar(): void {
+		const ratio = this.health / HEALTH_MAX;
+		const barW = VIRTUAL_W * ratio;
+		const barX = (VIRTUAL_W - barW) / 2;
+		const color = lerpColor(COLOR_HEALTH_LOW, COLOR_HEALTH_HIGH, ratio);
+		this.healthBarGfx.clear()
+			.rect(barX, 0, barW, HEALTH_BAR_HEIGHT)
+			.fill(color);
 	}
 
 	private drawTrajectory(): void {
@@ -409,10 +503,11 @@ export class Tutorial1 extends Container {
 
 	cleanup(): void {
 		this.app.ticker.remove(this.tickerFn);
-		window.removeEventListener('keydown', this.keydownFn);
-		window.removeEventListener('keyup',   this.keyupFn);
-		window.removeEventListener('mousedown', this.mousedownFn);
-		window.removeEventListener('mousemove', this.mousemoveFn);
-		window.removeEventListener('mouseup',   this.mouseupFn);
+		window.removeEventListener('keydown',     this.keydownFn);
+		window.removeEventListener('keyup',       this.keyupFn);
+		window.removeEventListener('mousedown',   this.mousedownFn);
+		window.removeEventListener('mousemove',   this.mousemoveFn);
+		window.removeEventListener('mouseup',     this.mouseupFn);
+		window.removeEventListener('contextmenu', this.contextmenuFn);
 	}
 }
