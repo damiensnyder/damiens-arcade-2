@@ -24,13 +24,13 @@ export class Game {
 		this.app.stage.scale.set(w / VIRTUAL_W);
 	}
 
-	setScene(scene: Scene): void {
+	setScene(scene: Scene | null): void {
 		if (this.currentScene) {
 			this.app.stage.removeChild(this.currentScene);
 			this.currentScene.cleanup?.();
 		}
 		this.currentScene = scene;
-		this.app.stage.addChild(scene);
+		if (scene) this.app.stage.addChild(scene);
 	}
 
 	destroy(): void {

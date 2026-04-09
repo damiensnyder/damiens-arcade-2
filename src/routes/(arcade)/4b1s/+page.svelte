@@ -2,12 +2,14 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { Game } from '$lib/games/4b1s/game.js';
 	import { Tutorial } from '$lib/games/4b1s/scenes/tutorial.js';
+	import { GameScene } from '$lib/games/4b1s/scenes/game.js';
 
 	let wrapper: HTMLDivElement;
 	let canvasArea: HTMLDivElement;
 	let container: HTMLDivElement;
 	let game: Game;
 	let fullscreen = false;
+	let view: 'menu' | 'tutorial' | 'play' = 'menu';
 
 	function toggleFullscreen() {
 		if (!document.fullscreenElement) {
@@ -21,15 +23,27 @@
 		fullscreen = !!document.fullscreenElement;
 	}
 
+	function goToMenu() {
+		view = 'menu';
+		game.setScene(null);
+	}
+
+	function startTutorial() {
+		view = 'tutorial';
+		game.setScene(new Tutorial(game.app, goToMenu));
+	}
+
+	function startPlay() {
+		view = 'play';
+		game.setScene(new GameScene(game.app, goToMenu));
+	}
+
 	let observer: ResizeObserver | null = null;
 
 	onMount(async () => {
 		game = new Game();
 		await game.init();
 		container.appendChild(game.app.canvas);
-
-		const scene = new Tutorial(game.app);
-		game.setScene(scene);
 
 		observer = new ResizeObserver((entries) => {
 			const { width, height } = entries[0].contentRect;
@@ -67,6 +81,12 @@
 
 	<div class="canvas-area" bind:this={canvasArea}>
 		<div class="canvas-container" bind:this={container}></div>
+		{#if view === 'menu'}
+			<div class="menu-overlay">
+				<button onclick={startPlay}>Play</button>
+				<button onclick={startTutorial}>Tutorial</button>
+			</div>
+		{/if}
 	</div>
 </div>
 
@@ -110,10 +130,34 @@
 	}
 
 	.canvas-area {
+		position: relative;
 		flex: 1;
 		width: 100%;
 		overflow: hidden;
 		align-items: center;
 		justify-content: center;
+	}
+
+	.menu-overlay {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 1rem;
+		background: var(--bg-1);
+	}
+
+	.menu-overlay button {
+		cursor: pointer;
+		padding: 0.5rem 2rem;
+		border-radius: 0.5rem;
+		border: 2px solid var(--text-3);
+		font-family: var(--font-subtitle);
+		font-size: 1.5rem;
+		color: var(--text-2);
+		background-color: var(--accent-2);
+		width: 12rem;
 	}
 </style>
