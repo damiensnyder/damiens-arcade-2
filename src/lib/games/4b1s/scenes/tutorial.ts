@@ -228,6 +228,7 @@ export class Tutorial extends Container {
 			}
 		};
 		this.mousemoveFn = (e) => {
+			if (this.slomo && !(e.buttons & 2)) this.slomo = false;
 			if (!this.aiming) return;
 			const pos = this.toVirtual(e.clientX, e.clientY);
 			this.aimCurrentVX  = pos.x;
