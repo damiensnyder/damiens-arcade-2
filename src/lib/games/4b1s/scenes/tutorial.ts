@@ -91,7 +91,7 @@ interface Bee {
 	gfx: Graphics;
 }
 
-export class Tutorial1 extends Container {
+export class Tutorial extends Container {
 	private app: Application;
 	private player: Graphics;
 	private trajectoryGfx: Graphics;

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { Game } from '$lib/games/4b1s/game.js';
-	import { Tutorial1 } from '$lib/games/4b1s/scenes/tutorial1.js';
+	import { Tutorial } from '$lib/games/4b1s/scenes/tutorial.js';
 
 	let wrapper: HTMLDivElement;
 	let canvasArea: HTMLDivElement;
@@ -28,7 +28,7 @@
 		await game.init();
 		container.appendChild(game.app.canvas);
 
-		const scene = new Tutorial1(game.app);
+		const scene = new Tutorial(game.app);
 		game.setScene(scene);
 
 		observer = new ResizeObserver((entries) => {
