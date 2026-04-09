@@ -415,7 +415,8 @@ export class GameScene extends Container {
 		}
 
 		this.timeScale = this.slomo ? SLOMO_FACTOR : 1.0;
-		const ts = this.timeScale;
+		const dt = this.app.ticker.deltaTime;
+		const ts = this.timeScale * dt;
 		this.elapsedSeconds += ts / 60;
 		const t = this.elapsedSeconds + 0.1; // offset matching 2b1s elapsed_seconds formula
 
@@ -461,22 +462,22 @@ export class GameScene extends Container {
 		// slo-mo:  (10 + elapsed/20) / 60  per real frame — no ts multiplier
 		// normal:  (5  + elapsed/20) / 60  per real frame
 		const drain = this.slomo
-			? (10 + this.elapsedSeconds / 20) / 60
-			: (5  + this.elapsedSeconds / 20) / 60;
+			? (10 + this.elapsedSeconds / 20) / 60 * dt
+			: (5  + this.elapsedSeconds / 20) / 60 * dt;
 		this.health = Math.max(0, this.health - drain);
 		if (this.health <= 0) this.die();
 		this.drawHealthBar();
 
 		// ── Bee spawning (interval = 120 * t^-0.2 real frames) ───────────────
 		const beeInterval = 120 * Math.pow(t, -0.2);
-		if (++this.beeSpawnTimer >= beeInterval) {
+		if ((this.beeSpawnTimer += dt) >= beeInterval) {
 			this.beeSpawnTimer = 0;
 			this.spawnBee();
 		}
 
 		// ── Bird spawning (interval = 60 * t^-0.05 real frames) ──────────────
 		const birdInterval = 60 * Math.pow(t, -0.05);
-		if (++this.birdSpawnTimer >= birdInterval) {
+		if ((this.birdSpawnTimer += dt) >= birdInterval) {
 			this.birdSpawnTimer = 0;
 			this.spawnBird();
 		}
@@ -579,8 +580,9 @@ export class GameScene extends Container {
 
 	private updateFloatTexts(): void {
 		const dead: FloatText[] = [];
+		const dt = this.app.ticker.deltaTime;
 		for (const ft of this.floatTexts) {
-			ft.life--;
+			ft.life -= dt;
 			const progress = ft.life / ft.maxLife;
 			ft.gfx.scale.set(progress);
 			ft.gfx.alpha = progress;

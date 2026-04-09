@@ -369,7 +369,8 @@ export class Tutorial extends Container {
 
 	private tick(): void {
 		this.timeScale = this.slomo ? SLOMO_FACTOR : 1.0;
-		const ts = this.timeScale;
+		const dt = this.app.ticker.deltaTime;
+		const ts = this.timeScale * dt;
 
 		const w = this.keys.has('KeyW');
 		const a = this.keys.has('KeyA');
@@ -412,29 +413,29 @@ export class Tutorial extends Container {
 		// ── Phase countdowns ──────────────────────────────────────────────────
 		if (this.phase === 1 && this.hasDoubleJumped && this.hasMovedLaterally) {
 			if (this.phase2Countdown === null) this.phase2Countdown = 120;
-			else if (--this.phase2Countdown <= 0) this.startPhase2();
+			else if ((this.phase2Countdown -= dt) <= 0) this.startPhase2();
 		}
 		if (this.phase === 2 && this.targets.length === 0) {
 			if (this.phase3Countdown === null) this.phase3Countdown = 60;
-			else if (--this.phase3Countdown <= 0) this.startPhase3();
+			else if ((this.phase3Countdown -= dt) <= 0) this.startPhase3();
 		}
 		if (this.phase === 3 && this.multiBirdScone) {
 			if (this.phase4Countdown === null) this.phase4Countdown = 60;
-			else if (--this.phase4Countdown <= 0) this.startPhase4();
+			else if ((this.phase4Countdown -= dt) <= 0) this.startPhase4();
 		}
 		if (this.phase === 4 && this.phase5Countdown !== null) {
-			if (--this.phase5Countdown <= 0) this.startPhase5();
+			if ((this.phase5Countdown -= dt) <= 0) this.startPhase5();
 		}
 
 		// ── Periodic spawning ─────────────────────────────────────────────────
 		if (this.phase >= 3) {
-			if (++this.phase3SpawnTimer >= TARGET_SPAWN_INTERVAL) {
+			if ((this.phase3SpawnTimer += dt) >= TARGET_SPAWN_INTERVAL) {
 				this.phase3SpawnTimer = 0;
 				this.spawnBird();
 			}
 		}
 		if (this.phase >= 5) {
-			if (++this.beeSpawnTimer >= BEE_SPAWN_INTERVAL) {
+			if ((this.beeSpawnTimer += dt) >= BEE_SPAWN_INTERVAL) {
 				this.beeSpawnTimer = 0;
 				this.spawnBee();
 			}
@@ -442,7 +443,7 @@ export class Tutorial extends Container {
 
 		// ── Health drain ──────────────────────────────────────────────────────
 		if (this.phase >= 4) {
-			const drain = this.slomo ? HEALTH_DRAIN_SLOMO_PER_FRAME : HEALTH_DRAIN_PER_FRAME;
+			const drain = (this.slomo ? HEALTH_DRAIN_SLOMO_PER_FRAME : HEALTH_DRAIN_PER_FRAME) * dt;
 			this.health = Math.max(0, this.health - drain);
 			if (this.health <= 0) this.resetHealth();
 			this.drawHealthBar();
@@ -450,7 +451,7 @@ export class Tutorial extends Container {
 
 		// ── Phase 5 "press E" text timer ──────────────────────────────────────
 		if (this.phase === 5 && this.phase5TextTimer !== null) {
-			if (++this.phase5TextTimer >= 300) {
+			if ((this.phase5TextTimer += dt) >= 300) {
 				this.phase5TextTimer = null;
 				this.label1.text = 'Press E to end the tutorial';
 			}

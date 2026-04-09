@@ -33,7 +33,7 @@ export const HEALTH_DRAIN_RATE       = 5;    // per second during normal play
 export const HEALTH_DRAIN_RATE_SLOMO = 15;   // per second while slo-mo is held
 export const HEALTH_FROM_BIRD        = 20;   // restored per bird fed
 export const HEALTH_BAR_HEIGHT       = 40;   // px (virtual)
-export const SLOMO_FACTOR            = 0.5;  // time scale while right-click held
+export const SLOMO_FACTOR            = 0.45;  // time scale while right-click held
 
 // ── Bees (enemies) ───────────────────────────────────────────────────────────
 export const BEE_SIZE           = 30;   // px square
