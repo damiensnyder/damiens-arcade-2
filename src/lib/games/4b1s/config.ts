@@ -35,6 +35,13 @@ export const HEALTH_FROM_BIRD        = 20;   // restored per bird fed
 export const HEALTH_BAR_HEIGHT       = 40;   // px (virtual)
 export const SLOMO_FACTOR            = 0.5;  // time scale while right-click held
 
+// ── Bees (enemies) ───────────────────────────────────────────────────────────
+export const BEE_SIZE           = 30;   // px square
+export const BEE_SPEED          = 8;    // px/frame base horizontal speed
+export const BEE_SPAWN_INTERVAL = 120;  // frames between bee spawns (phase 5)
+export const BEE_Y_MIN          = 300;  // virtual Y spawn range
+export const BEE_Y_MAX          = 1000;
+
 // ── Colors ────────────────────────────────────────────────────────────────────
 export const COLOR_BACKGROUND  = 0x334455;
 export const COLOR_PLATFORM    = 0x000000;
@@ -45,3 +52,4 @@ export const COLOR_TARGET        = 0x00cc00;
 export const COLOR_LABEL         = 0x001100;
 export const COLOR_HEALTH_HIGH   = 0x00ffff; // cyan when full
 export const COLOR_HEALTH_LOW    = 0xff0000; // red when empty
+export const COLOR_BEE           = 0xff0000;
