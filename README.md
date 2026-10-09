@@ -19,21 +19,21 @@ src/
 │   │   ├── types.ts              # Types for rooms or which apply across all games
 │   │   ├── room.svelte.ts        # Room state management
 │   │   ├── auction-ttt/          # Auction Tic-Tac-Toe
-│   │   ├── daily-qless/          # Daily Q-less
-│   │   └── mayhem-manager/        # Mayhem Manager
+│   │   ├── qless/                # Daily Q-less
+│   │   └── mayhem-manager/       # Mayhem Manager (shared types, client state, views)
 │   └── ws/
 │       ├── client.ts             # Client WebSocket wrapper with reconnect
 │       └── protocol.ts           # Message envelope types (Zod schemas)
 ├── routes/
 │   ├── +page.svelte              # Arcade homepage
-│   ├── auction-tic-tac-toe/      # Game pages
-│   ├── daily-qless/              # Game page
-│   └── mayhem-manager/           # Game pages
+│   ├── (arcade)/                 # Arcade-styled pages: homepage, game lobbies, Daily Q-less
+│   └── (mayhem)/                 # Mayhem Manager's game page, with its own look
 └── server/
     ├── index.ts                  # Custom Node server (HTTP + WebSocket)
     ├── ws.ts                     # WebSocket connection handler
     ├── rooms.ts                  # In-memory room management
-    └── game-registry.ts          # Game definitions registry
+    ├── game-registry.ts          # Game definitions registry
+    └── games/                    # Server-side game logic (auction-ttt, mayhem-manager/)
 ```
 
 ## Getting Started

@@ -1,0 +1,309 @@
+/* mm.css — Mayhem Manager's look (Comic Sans on warm browns), shared by its components.
+   Imported by src/routes/(mayhem)/+layout.svelte instead of arcade.css. */
+
+/* Sizes in this file are designed against a 16px root. */
+html:has(.mm) {
+	font-size: 16px;
+	background: #311;
+}
+
+/* app.css makes every div a centered flex column; Mayhem Manager uses normal blocks
+   and opts into flex where it wants it. :where keeps this easy to override. */
+.mm :where(div) {
+	display: block;
+	flex-flow: row nowrap;
+	align-items: normal;
+}
+
+/* arcade.css stays loaded after navigating here from another arcade page, so undo
+   the parts of it that would otherwise leak in. */
+.mm h1,
+.mm h2,
+.mm h3 {
+	font-family: inherit;
+	text-align: inherit;
+	color: inherit;
+}
+
+.mm {
+	--mm-bg: #311;
+	--mm-panel: #632;
+	--mm-card: #521;
+	--mm-line: #755;
+	--mm-text: #ddd;
+	--mm-muted: #aaa;
+	--mm-own: #eeb;
+	--mm-link: #e99;
+	--mm-cut: #e8c;
+	font-family: 'Comic Sans MS', 'Chalkboard', 'Comic Neue', cursive;
+	font-size: 18px;
+	font-weight: 300;
+	color: var(--mm-text);
+	background: var(--mm-bg);
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+}
+
+.mm * {
+	box-sizing: border-box;
+}
+
+.mm h1 {
+	margin: 0;
+	font-size: 2.2rem;
+	font-weight: 600;
+	color: var(--mm-text);
+}
+
+.mm h2 {
+	margin: 0;
+	font-size: 1.75rem;
+	font-weight: 600;
+}
+
+.mm h3 {
+	margin: 0;
+	font-size: 1.3rem;
+	font-weight: 500;
+}
+
+.mm p {
+	margin: 0;
+}
+
+.mm a {
+	color: var(--mm-link);
+}
+
+.mm a:hover {
+	color: var(--mm-own);
+}
+
+.mm button,
+.mm .btn {
+	font: inherit;
+	font-size: 1rem;
+	color: var(--mm-text);
+	background: var(--mm-line);
+	border: 2px solid var(--mm-muted);
+	border-radius: 0.5rem;
+	padding: 0.15rem 0.6rem;
+	min-height: 2.2rem;
+	width: fit-content;
+	cursor: pointer;
+	text-decoration: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	white-space: nowrap;
+	margin: 0;
+}
+
+.mm button:hover,
+.mm .btn:hover {
+	background: #633;
+	color: #d7d7d7;
+}
+
+.mm button:disabled {
+	color: var(--mm-muted);
+	cursor: not-allowed;
+	opacity: 0.6;
+	background: var(--mm-line);
+}
+
+.mm button.go,
+.mm .btn.go {
+	border-color: var(--mm-own);
+	color: var(--mm-own);
+}
+
+.mm button.host {
+	border-style: dashed;
+}
+
+.mm button.on {
+	background: #633;
+	border-color: var(--mm-own);
+	color: var(--mm-own);
+}
+
+.mm button.mini {
+	font-size: 0.8rem;
+	min-height: 1.6rem;
+	padding: 0 0.45rem;
+}
+
+.mm select,
+.mm input[type='text'],
+.mm textarea {
+	font: inherit;
+	font-size: 0.9rem;
+	color: var(--mm-text);
+	background: var(--mm-line);
+	border: 2px solid var(--mm-muted);
+	border-radius: 0.4rem;
+	padding: 0.15rem 0.3rem;
+	min-height: 1.9rem;
+	max-width: 100%;
+	margin: 0;
+	flex: 0 1 auto;
+}
+
+.mm textarea {
+	font-family: Menlo, monospace;
+	font-size: 0.75rem;
+}
+
+/* ---- layout ---- */
+
+.mm .panel {
+	flex: 1;
+	margin: 0 1.5rem 1.5rem;
+	background: var(--mm-panel);
+	border: 3px solid var(--mm-line);
+	border-radius: 1.5rem;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	gap: 1rem 2rem;
+	padding: 1.25rem 2rem 1.5rem;
+}
+
+.mm .col {
+	display: flex;
+	flex-direction: column;
+	gap: 0.75rem;
+	min-width: 0;
+}
+
+.mm .card {
+	background: var(--mm-card);
+	border: 2px solid var(--mm-line);
+	border-radius: 1rem;
+	padding: 0.75rem 1rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+}
+
+.mm .card.mine {
+	border-color: var(--mm-own);
+}
+
+.mm .card.gone {
+	opacity: 0.6;
+}
+
+.mm .row {
+	display: flex;
+	align-items: center;
+	gap: 0.6rem;
+}
+
+.mm .between {
+	justify-content: space-between;
+}
+
+.mm .wrap {
+	flex-wrap: wrap;
+}
+
+.mm .muted {
+	color: var(--mm-muted);
+}
+
+.mm .small {
+	font-size: 0.85rem;
+}
+
+.mm .own {
+	color: var(--mm-own);
+}
+
+.mm .num {
+	text-align: right;
+}
+
+/* table-ish rows */
+.mm .tr {
+	display: grid;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.3rem 0;
+	border-bottom: 1px solid var(--mm-line);
+	font-size: 0.95rem;
+}
+
+.mm .tr.head {
+	color: var(--mm-muted);
+	font-size: 0.85rem;
+	border-bottom: 2px solid var(--mm-line);
+}
+
+.mm .tn {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-width: 0;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.mm .tr.me .tn,
+.mm .tr.me .pn {
+	color: var(--mm-own);
+}
+
+.mm .cutline {
+	border-top: 2px dashed var(--mm-cut);
+	margin: 0.15rem 0;
+}
+
+/* sticky bar for the main action on phones; desktop shows the action in the sidebar */
+.mm .actionbar {
+	display: none;
+}
+
+@media (max-width: 900px) {
+	.mm .actionbar {
+		position: sticky;
+		bottom: 0;
+		z-index: 20;
+		background: var(--mm-card);
+		border-top: 3px solid var(--mm-line);
+		padding: 0.6rem 0.75rem 1.1rem;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.mm .desktop-only {
+		display: none !important;
+	}
+}
+
+@media (max-width: 720px) {
+	.mm {
+		font-size: 16px;
+	}
+
+	.mm .panel {
+		margin: 0 0.5rem 0.5rem;
+		padding: 0.75rem;
+	}
+}
+
+.mm .visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	white-space: nowrap;
+}

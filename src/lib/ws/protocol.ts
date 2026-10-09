@@ -1,7 +1,7 @@
 // Messages sent from client to server
 export type ClientMessage =
 	| { type: 'createRoom'; gameType: string }
-	| { type: 'joinRoom'; roomCode: string }
+	| { type: 'joinRoom'; roomCode: string; clientId?: string }
 	| { type: 'action'; payload: unknown };
 
 // Messages sent from server to client

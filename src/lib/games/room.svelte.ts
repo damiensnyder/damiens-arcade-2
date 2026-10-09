@@ -1,6 +1,27 @@
 import { WSClient, getWsUrl } from '$lib/ws/client.js';
 import type { ServerMessage } from '$lib/ws/protocol.js';
 
+/**
+ * Per-tab ID sent when joining, so a refresh or reconnect keeps the same seat.
+ * sessionStorage (not localStorage) so two tabs can play as two different people.
+ */
+function getClientId(): string | undefined {
+	try {
+		let id = sessionStorage.getItem('arcadeClientId');
+		if (!id) {
+			// crypto.randomUUID only exists in secure contexts (not plain-http LAN testing)
+			id =
+				typeof crypto.randomUUID === 'function'
+					? crypto.randomUUID()
+					: Array.from({ length: 4 }, () => Math.random().toString(36).slice(2)).join('');
+			sessionStorage.setItem('arcadeClientId', id);
+		}
+		return id;
+	} catch {
+		return undefined;
+	}
+}
+
 type EventHandler = (event: Record<string, unknown>) => void;
 type GamestateHandler = (state: unknown) => void;
 
@@ -20,7 +41,7 @@ export class RoomState {
 		this.ws = new WSClient(getWsUrl());
 
 		this.ws.onOpen(() => {
-			this.ws!.send({ type: 'joinRoom', roomCode });
+			this.ws!.send({ type: 'joinRoom', roomCode, clientId: getClientId() });
 		});
 
 		this.ws.addHandler((msg: ServerMessage) => this.handleMessage(msg));

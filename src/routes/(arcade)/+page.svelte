@@ -30,6 +30,17 @@
 				<p>A daily puzzle based on the word game Q-less. Arrange all your tiles into interlocking words. Guaranteed solvable every day.</p>
 			</div>
 		</div>
+
+		<div class="card horiz">
+			<img src="/thumbnails/mayhem-manager.svg" alt="Mayhem Manager" class="thumbnail" draggable="false" />
+			<div class="card-body">
+				<div class="card-top horiz">
+					<h2>Mayhem Manager</h2>
+					<a href="/mayhem-manager" class="play-btn">Play Now</a>
+				</div>
+				<p>Run a team of fighters through seasons of free agency, training and chaotic brawls. Play with friends or against bots.</p>
+			</div>
+		</div>
 	</div>
 </div>
 
