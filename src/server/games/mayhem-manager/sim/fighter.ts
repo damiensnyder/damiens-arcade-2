@@ -1,4 +1,5 @@
-import type { FightEvent, Fighter, Look, Stats, TeamId, Tint } from '../../../../lib/games/mayhem-manager/types.js';
+import { EQUIPMENT } from '../../../../lib/games/mayhem-manager/catalog.js';
+import type { FightEvent, Fighter, Look, Slot, Stats, TeamId, Tint } from '../../../../lib/games/mayhem-manager/types.js';
 import { ABILITY_BEHAVIORS, EQUIPMENT_BEHAVIORS, FISTS, attackStats, type AttackSpec, type Behavior } from './behaviors.js';
 import {
 	ARENA_SIZE,
@@ -23,14 +24,22 @@ export interface BattleItem {
 	state: Record<string, number>;
 }
 
-interface StatusEffect {
+export interface StatusEffect {
 	name: string;
 	remaining: number;
+	/** Whether it's bad for the fighter it's on (for immunities and the like). */
+	negative: boolean;
 	/** Applied when the effect starts and undone exactly when it ends. */
 	mods: Partial<Stats>;
 	/** Cooldowns tick at half speed. */
-	slow: boolean;
+	slow?: boolean;
+	/** Damage per second, before toughness. */
+	burn?: number;
+	/** Who caused it (for damage credit, or who a taunt points at). */
+	source?: BattleFighter;
 	tint: Tint;
+	/** Seconds since the last burn. */
+	timer?: number;
 }
 
 interface AttackOption {
@@ -39,6 +48,7 @@ interface AttackOption {
 	damage: number;
 	cooldown: number;
 	charges: number;
+	knockback: number;
 }
 
 export class BattleFighter {
@@ -86,14 +96,32 @@ export class BattleFighter {
 		if (ability && Object.keys(ability).length > 0) this.items.push(item(fighter.ability, 'ability', ability));
 		for (const key of equipmentKeys) {
 			const behavior = EQUIPMENT_BEHAVIORS[key];
+			if (fighter.ability === 'refusesUnattuned' && !fighter.attunements.includes(key)) continue;
 			if (behavior) this.items.push(item(key, 'equipment', behavior));
 		}
 	}
 
+	/** Gives the fighter an ability mid-fight (it starts the fight as if they'd always had it). */
+	addAbility(key: string, behavior: Behavior): void {
+		const added: BattleItem = { key, kind: 'ability', behavior, attuned: false, owner: this, state: {} };
+		this.items.push(added);
+		const mods = behavior.statMods?.(false);
+		if (mods) this.changeStats(mods);
+		behavior.onFightStart?.(added);
+	}
+
+	slotsOf(item: BattleItem): Slot[] {
+		return item.kind === 'equipment' ? (EQUIPMENT[item.key]?.slots ?? []) : [];
+	}
+
+	teamMoney(): number {
+		return this.fight.moneyOf(this.team);
+	}
+
 	// ---- derived numbers ----
 
-	meleeDamageMultiplier(): number {
-		return Math.max(0.5 + 0.1 * this.stats.strength, 0.25);
+	meleeDamageMultiplier(stat: keyof Stats = 'strength'): number {
+		return Math.max(0.5 + 0.1 * this.stats[stat], 0.25);
 	}
 
 	rangedHitChance(): number {
@@ -174,7 +202,9 @@ export class BattleFighter {
 	private rawDps(option: AttackOption): number {
 		const perUse =
 			option.spec.kind === 'melee'
-				? option.damage * this.meleeDamageMultiplier()
+				? option.spec.fixed
+					? option.damage
+					: option.damage * this.meleeDamageMultiplier(option.spec.scalesWith)
 				: option.spec.kind === 'ranged'
 					? option.damage * this.rangedHitChance()
 					: option.damage;
@@ -229,6 +259,13 @@ export class BattleFighter {
 			}
 		}
 		this.effects = this.effects.filter((e) => e.remaining > EPSILON);
+		for (const effect of this.effects) {
+			if (!effect.burn || this.hp <= 0) continue;
+			effect.timer = (effect.timer ?? 0) + TICK_LENGTH;
+			if (effect.timer < 1 - EPSILON) continue;
+			effect.timer = 0;
+			(effect.source ?? this).dealDamage(this, Math.ceil(effect.burn * this.damageTakenMultiplier()));
+		}
 		const newTint = this.tint();
 		if (statsChanged || newTint.some((x, i) => x !== oldTint[i])) {
 			this.log({ type: 'animation', fighter: this.index, updates: { stats: this.stats, tint: newTint } });
@@ -243,10 +280,19 @@ export class BattleFighter {
 
 	act(): void {
 		if (this.hp <= 0) return;
-		const enemies = this.enemies();
-		if (enemies.length === 0) return;
+		const allEnemies = this.enemies();
+		if (allEnemies.length === 0) return;
 		const startX = this.x;
 		const startY = this.y;
+
+		if (this.effects.some((e) => e.name === 'scared')) {
+			const nearest = this.nearestEnemy();
+			if (nearest) this.moveAwayFrom(nearest);
+			return;
+		}
+		// taunted fighters can only go after whoever taunted them (area attacks still hit everyone)
+		const taunter = this.effects.find((e) => e.name === 'taunted')?.source;
+		const enemies = taunter && taunter.hp > 0 ? [taunter] : allEnemies;
 
 		let bestPriority = -Infinity;
 		let bestAction: (() => void) | null = null;
@@ -255,7 +301,7 @@ export class BattleFighter {
 			const dps = this.rawDps(option);
 			if (option.spec.kind === 'aoe') {
 				const timeToFirst = this.timeUntilReady(option.charges);
-				const priority = enemies.reduce((sum, e) => sum + this.valueOfAttacking(e, dps, timeToFirst), 0);
+				const priority = allEnemies.reduce((sum, e) => sum + this.valueOfAttacking(e, dps, timeToFirst), 0);
 				if (priority > bestPriority) {
 					bestPriority = priority;
 					bestAction = () => this.aoeAttack(option);
@@ -311,7 +357,9 @@ export class BattleFighter {
 			this.charges -= option.charges;
 			this.setCooldown(option.cooldown);
 			this.swing(Pose.BackswingStart, Pose.Backswing);
-			this.hit(target, option.item, option.damage * this.meleeDamageMultiplier(), option.spec.knockback);
+			const base = option.spec.damageAt?.(option.item, target) ?? option.damage;
+			const damage = option.spec.fixed ? base : base * this.meleeDamageMultiplier(option.spec.scalesWith);
+			this.hit(target, option.item, damage, option.knockback, !option.spec.fixed);
 		} else if (this.charges < option.charges && this.cooldown === 0) {
 			this.charge();
 		}
@@ -328,7 +376,7 @@ export class BattleFighter {
 				this.log({ type: 'projectile', fighter: this.index, target: target.index, img: option.spec.projectile });
 			}
 			if (this.fight.rng.real() < this.rangedHitChance()) {
-				this.hit(target, option.item, option.damage, option.spec.knockback);
+				this.hit(target, option.item, option.spec.damageAt?.(option.item, target) ?? option.damage, option.knockback);
 			} else {
 				this.log({ type: 'text', fighter: target.index, text: 'missed', color: '#aaa' });
 			}
@@ -347,7 +395,7 @@ export class BattleFighter {
 				if (option.spec.projectile) {
 					this.log({ type: 'projectile', fighter: this.index, target: target.index, img: option.spec.projectile });
 				}
-				this.hit(target, option.item, option.damage, option.spec.knockback);
+				this.hit(target, option.item, option.spec.damageAt?.(option.item, target) ?? option.damage, option.knockback);
 			}
 		} else if (this.charges < option.charges && this.cooldown === 0) {
 			this.charge();
@@ -364,7 +412,7 @@ export class BattleFighter {
 		if (threat) this.moveAwayFrom(threat);
 	}
 
-	private charge(): void {
+	charge(): void {
 		this.charges += 1;
 		this.setCooldown(this.timeToCharge());
 		this.log({ type: 'particle', fighter: this.index, img: '/mm/charge.png' });
@@ -383,9 +431,13 @@ export class BattleFighter {
 
 	// ---- hits and damage ----
 
-	/** Resolves one landed attack: prevention, damage, knockback, then on-hit effects. */
-	private hit(target: BattleFighter, source: BattleItem, rawDamage: number, knockback: number): void {
-		const damage = Math.ceil(rawDamage * target.damageTakenMultiplier());
+	/**
+	 * Resolves one landed attack: prevention, damage, knockback, then on-hit effects.
+	 * `scaled` false means the target's toughness doesn't reduce the damage.
+	 */
+	private hit(target: BattleFighter, source: BattleItem, rawDamage: number, knockback: number, scaled = true): void {
+		for (const item of this.items) rawDamage *= item.behavior.damageMultiplier?.(item, target) ?? 1;
+		const damage = Math.ceil(rawDamage * (scaled ? target.damageTakenMultiplier() : 1));
 		for (const item of [...target.items]) {
 			if (item.behavior.preventHit?.(item, this, damage)) return;
 		}
@@ -416,8 +468,9 @@ export class BattleFighter {
 		target.log({ type: 'text', fighter: target.index, text: String(amount) });
 		if (isHit) target.log({ type: 'particle', fighter: target.index, img: '/mm/damage.png' });
 		if (target.hp <= 0) {
-			this.kos++;
+			if (target.team !== this.team) this.kos++;
 			target.kod++;
+			this.fight.knockedOut(target, this);
 		}
 	}
 
@@ -433,6 +486,8 @@ export class BattleFighter {
 	}
 
 	addEffect(effect: StatusEffect): void {
+		if (this.hp <= 0) return;
+		if (this.items.some((i) => i.behavior.blocksEffect?.(i, effect))) return;
 		const existing = this.effects.find((e) => e.name === effect.name);
 		if (existing) {
 			existing.remaining = Math.max(existing.remaining, effect.remaining);

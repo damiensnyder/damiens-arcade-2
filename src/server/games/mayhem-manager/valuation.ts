@@ -25,6 +25,7 @@ function partsOf(fighter: Fighter, equipment: string[]): Part[] {
 	if (ability) parts.push({ key: fighter.ability, behavior: ability, attuned: false });
 	for (const key of equipment) {
 		const behavior = EQUIPMENT_BEHAVIORS[key];
+		if (fighter.ability === 'refusesUnattuned' && !fighter.attunements.includes(key)) continue;
 		if (behavior) parts.push({ key, behavior, attuned: fighter.attunements.includes(key) });
 	}
 	return parts;
@@ -49,7 +50,7 @@ export interface PowerEstimate {
 export function fighterPower(fighter: Fighter, equipment: string[]): PowerEstimate {
 	const parts = partsOf(fighter, equipment);
 	const s = effectiveStats(fighter, equipment);
-	const meleeMult = Math.max(0.5 + 0.1 * s.strength, 0.25);
+	const meleeMult = (stat: keyof Stats = 'strength') => Math.max(0.5 + 0.1 * s[stat], 0.25);
 	const hitChance = Math.max(0, Math.min(0.25 + 0.05 * s.accuracy, 1));
 	const timeToCharge = Math.max(6 - 0.4 * s.energy, 1);
 	const damageTaken = Math.max(1.25 - 0.05 * s.toughness, 0.5);
@@ -64,7 +65,9 @@ export function fighterPower(fighter: Fighter, equipment: string[]): PowerEstima
 		const { damage, cooldown, charges } = attackStats(spec, part.attuned);
 		const cycle = Math.max(cooldown - cooldownReduction, TICK_LENGTH) + charges * timeToCharge;
 		const perUse =
-			spec.kind === 'melee' ? damage * meleeMult : spec.kind === 'ranged' ? damage * hitChance : damage * AOE_TARGETS;
+			spec.kind === 'melee'
+				? damage * (spec.fixed ? 1 : meleeMult(spec.scalesWith))
+				: spec.kind === 'ranged' ? damage * hitChance : damage * AOE_TARGETS;
 		if (perUse / cycle > dps) {
 			dps = perUse / cycle;
 			attacksPerSecond = 1 / cycle;

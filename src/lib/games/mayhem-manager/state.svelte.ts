@@ -31,6 +31,11 @@ export class MMState {
 	choosingTeam = $state(false);
 	scouting = $state(false);
 	watching = $state<{ matchId: number; log: FightLog | null } | null>(null);
+	/**
+	 * The viewer's match that was just played. Its round stays on screen (see heldMatch) until
+	 * they move on, even though the server starts the next round as soon as every fight is done.
+	 */
+	playedMatchId = $state<number | null>(null);
 	notice = $state<string | null>(null);
 	leagueExport = $state<string | null>(null);
 	/** Match IDs whose results this viewer has chosen to see. */
@@ -64,7 +69,12 @@ export class MMState {
 		const { stats, ...rest } = wire;
 		const vp: MMViewpoint = { ...rest, statLines: unpackStatLines(stats) };
 		const prev = this.vp;
+		const before = this.myCurrentMatch();
 		this.vp = vp;
+		if (before && !before.result && vp.matches.find((m) => m.id === before.id)?.result) {
+			this.playedMatchId = before.id;
+			this.scouting = false;
+		}
 		if (prev && prev.historyVersion !== vp.historyVersion) {
 			// a season just finished (or a league was imported); cached history is out of date
 			this.seasonTotals = new Map();
@@ -261,6 +271,20 @@ export class MMState {
 		const mine = this.vp?.myTeam;
 		if (mine == null) return undefined;
 		return this.currentMatches().find((m) => m.a === mine || m.b === mine);
+	}
+
+	/**
+	 * The viewer's just-played match, once the league has moved on to the next round but the
+	 * viewer hasn't. Not kept for a playoff loss, since there's nothing to move on to.
+	 */
+	heldMatch(): Match | undefined {
+		const vp = this.vp;
+		if (!vp || this.playedMatchId === null) return undefined;
+		if (vp.phase.kind !== 'regularSeason' && vp.phase.kind !== 'playoffs') return undefined;
+		const held = vp.matches.find((m) => m.id === this.playedMatchId && m.season === vp.season);
+		if (!held || this.currentMatches().some((m) => m.id === held.id)) return undefined;
+		if (held.round !== null && !this.myCurrentMatch()) return undefined;
+		return held;
 	}
 
 	/** My most recent finished match from an earlier round, for the "last week" card. */

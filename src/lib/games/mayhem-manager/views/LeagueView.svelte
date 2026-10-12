@@ -89,7 +89,7 @@
 						<span class="acts"><button type="button" class="mini" onclick={() => mm.viewTeam(r.team)}>view</button></span>
 					</div>
 				{/each}
-				<span class="muted small">PF: your fighters still standing at the end of your fights. PA: opponents' fighters still standing. Ties are broken by the difference.</span>
+				<span class="muted small">PF: the number of prevailing fighters you have at the end of a fight. PA: opponents' prevailing fighters.</span>
 			</div>
 
 			<div class="card">

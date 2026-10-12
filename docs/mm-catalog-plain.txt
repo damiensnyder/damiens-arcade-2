@@ -1,0 +1,188 @@
+# Equipment
+
+Battle Axe
+two-handed, $32
+Melee. Deals 70 [attuned: 90] damage. Cooldown 4s.
+learn this secret trick lumberjacks DON'T want you to know
+
+Bow
+two-handed, $12
+Ranged. Deals 50 [attuned: 65] damage. Cooldown 5s.
+
+Corn Dog
+hand, $12
+Single-use. Heals 40 [attuned: 60] HP.
+surprisingly nutritious
+
+Devil Horns
+head, $20
+-2 toughness. +3 [attuned: +4] to all other stats.
+
+Diamond Sword
+hand, $30
+Melee. Deals 50 [attuned: 65] damage. Cooldown 3s.
+Durability: 858/1561; Bane of Arthropods IV
+
+Fairy Hat
+head, $17
+On hit dealt: Freeze the target for 2s [attuned: 3s].
+
+Flamingo Floaty
+legs, $5
+On hit taken: Prevent all damage. Remove Flamingo Floaty.
+*pop!*
+
+Frilly Skirt
+legs, $24
+Makes opponents much less likely to target the wearer.
+you wouldn't hit someone in a frilly little skirt, would you?
+
+Full Suit of Armor
+head, torso, legs, feet, $15
++6 [attuned: +7.5] toughness, -1.5 speed.
+clank. clank. clank. clank
+
+Jellyhat
+head, $13
+On melee hit taken: The attacker loses 10 [attuned: 15] HP.
+
+Laser Blaster
+hand, $25
+Ranged. Deals 40 [attuned: 50] damage. Cooldown 2s.
+
+Rhinoceros Beetle Horn
+head, $10
+On hit dealt: Gain +1 [attuned: +1.5] strength.
+the rhinoceros beetle is the strongest creature on earth
+
+Roller Blades
+feet, $23
+Melee. Deals 30 damage. Cooldown 4s. +2 [attuned: +3] speed.
+
+Shield
+hand, $25
+50% chance to block hits when facing the attacker.
+
+Shiv
+hand, $14
+Melee. Deals 16 damage. Cooldown 2s [attuned: 1.5s].
+
+Snowman Head
+head, $22
+Ranged. Deals 10 damage. Cooldown 1.5s. On hit dealt: Freeze the target for 1s [attuned: 2s].
+
+Sports Jersey
+torso, $16
++0.5 to all stats for each other teammate still standing [attuned: including oneself].
+teamwork? i sure hope it does!
+
+Viking Helmet
+head, $11
++1 toughness. +1 strength for every 25 [attuned: 20] HP missing.
+
+Wand of the Great Pyromaniac
+hand, $40
+Ranged. Deals 40 [attuned: 50] damage to all enemies and applies 4s of burning. Requires 3 charges. Cooldown 1s.
+the Great Pyromaniac might have been a little *too* great
+
+Zap Helmet
+head, $25
+Every 3s, deals 15 [attuned: 20] damage to the nearest enemy fighter.
+
+Headbutter’s Delight
+head, $18
+Melee. Deals 20 [attuned: 25] damage. Damage scales with toughness instead of strength.
+
+Chainsaw Headband
+head, $22
+Every second, deal 4 [attuned: 5] damage to all enemies in melee range.
+
+The Money Sword
+hand, $12
+Deals 10 damage for every $8 [attuned: $6] your team has.
+
+Halo
+head, $23
+When a teammate is KO'd, revive them at 40% [attuned: 50%] HP. Remove Halo.
+
+Eyepatch
+head, $21
+On KO: Loot $2 [attuned: $3] from the opponent.
+
+Shrapnel
+head, $19
+When KO'd: Deal 30 [attuned: 40] damage to ALL fighters within 10m.
+
+Knife Shoes
+feet, $8
+Whenever an opponent enters melee range, deal 5 [attuned: 6] damage to them.
+
+Censored Bar
+legs, $7
+Wearer is immune to status effects [attuned: only negative status effects].
+
+The Ratio-Inator
+hand, $28
+Melee. All hits reduce the target's HP by 30% [attuned: 40%]. Cooldown 2.5s.
+
+Speedo
+legs, $4
++1 [attuned: 1.5] speed
+it's just so aerodynamic
+
+Steel-Toed Boots
+feet, $10
+Melee. Deals 20 damage. Has triple [attuned: quintuple] knockback. Cooldown 4s.
+
+Novelty Arrow Hat
+head, $6
++1 [attuned: 1.5] accuracy
+
+Flower of Power
+hand, $11
+Heal a teammate for 15 [attuned: 20] HP. Requires 1 charge. Cooldown 1s.
+
+# Abilities
+
+On hit dealt: Target loses 5 extra HP.
+just has a little more "oomph"
+
+On hit taken: Gain 1 strength.
+
+Fists deal double damage.
+
+All cooldowns are 0.2s shorter.
+
+On KO: Team gains $3.
+it's called being a "brand ambassador"
+
+On hit: Heal 20% of damage dealt.
+
+Teammates start each fight hyped for 5s.
+delivers quite the pep talk
+
+All enemies in melee range are taunted.
+"is that the best you've got?"
+
+When hit: Becomes scared for 3s.
+don't act like you're any better
+
+After each training camp, gives a younger teammate +0.5 stars to a random stat.
+
+Deals double damage to targets with a negative status effect.
+
+This fighter's summons spawn with +50% HP.
+
++3 to all stats when all other teammates are downed.
+
+Starts each fight with a random ability.
+
+When hit: 10% chance to drop a handheld equipment.
+bit of a klutz. teehee!
+
+Refuses to use unattuned equipment.
+
+Immune to negative status effects.
+
+Can't attune to equipment.
+was held back a couple grades as well

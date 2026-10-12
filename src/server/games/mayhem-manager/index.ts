@@ -544,6 +544,7 @@ export default class MayhemManager extends GameLogicHandler {
 		if (!fighter) return false;
 		if (plan?.kind === 'stat' && fighter.stats[plan.stat] >= MAX_STAT) return false;
 		if (plan?.kind === 'attune') {
+			if (fighter.ability === 'cantAttune') return false;
 			const owned = [...team.equipment.map((e) => e.key), ...team.shop.filter((s) => s.bought).map((s) => s.key)];
 			if (!owned.includes(plan.key) || fighter.attunements.includes(plan.key)) return false;
 		}
@@ -564,6 +565,13 @@ export default class MayhemManager extends GameLogicHandler {
 				if (plan?.kind === 'stat') f.stats[plan.stat] = Math.min(f.stats[plan.stat] + 1, MAX_STAT);
 				else if (plan?.kind === 'attune' && !f.attunements.includes(plan.key)) f.attunements.push(plan.key);
 				this.develop(f);
+			}
+			for (const mentor of team.fighters.filter((f) => f.ability === 'mentor')) {
+				const younger = team.fighters.filter((f) => f.age < mentor.age);
+				if (younger.length === 0) continue;
+				const student = this.rng.pick(younger);
+				const stat = this.rng.pick(STAT_NAMES);
+				student.stats[stat] = Math.min(student.stats[stat] + 1, MAX_STAT);
 			}
 			if (team.fighters.length === 0) team.fighters.push(concernedOwner(this.nextId()));
 			team.shop = [];
@@ -654,7 +662,8 @@ export default class MayhemManager extends GameLogicHandler {
 				combatants.push({ fighter, equipment: (lineup[fighter.id] ?? []).map((id) => keyOf.get(id)!), team: team.id });
 			}
 		}
-		const outcome = simulateFight(this.rng, combatants, true);
+		const outcome = simulateFight(this.rng, combatants, true, new Map([a, b].map((t) => [t.id, t.money])));
+		for (const team of [a, b]) team.money = Math.max(0, team.money + (outcome.moneyChange.get(team.id) ?? 0));
 		match.result = {
 			winner: outcome.winner,
 			standingA: outcome.standing.get(a.id) ?? 0,

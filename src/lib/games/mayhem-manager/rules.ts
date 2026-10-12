@@ -4,7 +4,7 @@ import { EQUIPMENT } from './catalog.js';
 import type { Equipment, Fighter, Match, Phase, Slot, StandingRow, TeamId } from './types.js';
 
 export const MAX_TEAMS = 16;
-export const STARTING_MONEY = 200;
+export const STARTING_MONEY = 100;
 /** Each offseason, teams keep half their money and get this much more. */
 export const SEASON_INCOME = 100;
 export const FA_DAYS = 3;

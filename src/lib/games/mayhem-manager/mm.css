@@ -120,10 +120,6 @@ html:has(.mm) {
 	color: var(--mm-own);
 }
 
-.mm button.host {
-	border-style: dashed;
-}
-
 .mm button.on {
 	background: #633;
 	border-color: var(--mm-own);

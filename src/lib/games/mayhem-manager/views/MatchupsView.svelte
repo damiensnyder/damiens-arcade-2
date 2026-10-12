@@ -9,8 +9,11 @@
 
 	const mm = getContext<MMState>('mm');
 	const vp = $derived(mm.vp!);
-	const matches = $derived(mm.currentMatches());
-	const week = $derived(vp.phase.kind === 'regularSeason' ? vp.phase.week + 1 : 1);
+	// after your fight, its week stays up until you move on, even if the next one has started
+	const held = $derived(mm.heldMatch());
+	const matches = $derived(held ? vp.matches.filter((m) => m.season === vp.season && m.week === held.week) : mm.currentMatches());
+	const week = $derived(held ? held.week! + 1 : vp.phase.kind === 'regularSeason' ? vp.phase.week + 1 : 1);
+	const nextLabel = $derived(vp.phase.kind === 'regularSeason' ? `on to week ${vp.phase.week + 1}` : 'on to the playoffs');
 
 	const isReady = (t: TeamId) => mm.team(t)?.ready ?? false;
 
@@ -22,7 +25,10 @@
 
 <main class="panel">
 	<section class="col main">
-		<h3>Week {week} matchups</h3>
+		<div class="row between">
+			<h3>Week {week} matchups</h3>
+			{#if held}<button type="button" class="go" onclick={() => (mm.playedMatchId = null)}>{nextLabel}</button>{/if}
+		</div>
 		{#each matches as m (m.id)}
 			{@const mineHere = m.a === vp.myTeam || m.b === vp.myTeam}
 			<article class="card game-card" class:mine={mineHere}>

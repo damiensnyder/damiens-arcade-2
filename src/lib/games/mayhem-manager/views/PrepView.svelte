@@ -29,6 +29,9 @@
 		const others = (lineup[f.id] ?? []).filter((id) => id !== e.id).map(keyOf);
 		const fits = canWearTogether([...others, e.key]);
 		let note = '';
+		if (f.ability === 'refusesUnattuned' && !f.attunements.includes(e.key)) {
+			return { disabled: true, label: f.name + ' (not attuned)' };
+		}
 		if (!fits) {
 			const slots = EQUIPMENT[e.key]?.slots ?? [];
 			note = slots.includes('hand') ? ' (hands full)' : ` (${slots[0]} taken)`;

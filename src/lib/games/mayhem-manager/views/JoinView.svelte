@@ -75,9 +75,6 @@
 			{#if pregame && vp.teams.length % 2 === 1}
 				<span class="muted small note">odd number of teams – a bot will be added to make it even.</span>
 			{/if}
-			{#if pregame}
-				<span class="muted small note">the season starts when everyone with a team is ready{isHost ? ', or when you start it' : ''}.</span>
-			{/if}
 		</div>
 
 		<div class="side-actions desktop-only">
@@ -86,7 +83,7 @@
 				<button type="button" class:go={!mine.ready} onclick={() => mm.act({ type: mine.ready ? 'unready' : 'ready' })}>{mine.ready ? 'unready' : 'ready'}</button>
 			{/if}
 			{#if isHost && canAdd}
-				<button type="button" class="host" onclick={() => mm.act({ type: 'addBot' })}>add a bot</button>
+				<button type="button" onclick={() => mm.act({ type: 'addBot' })}>add a bot</button>
 			{/if}
 			{#if isHost && pregame}
 				<button type="button" class="go" disabled={vp.teams.length === 0} onclick={() => mm.act({ type: 'forceReady' })}>start season</button>
@@ -104,7 +101,7 @@
 		<button type="button" class:go={!mine.ready} onclick={() => mm.act({ type: mine.ready ? 'unready' : 'ready' })}>{mine.ready ? 'unready' : 'ready'}</button>
 	{/if}
 	{#if isHost && canAdd}
-		<button type="button" class="host" onclick={() => mm.act({ type: 'addBot' })}>add a bot</button>
+		<button type="button" onclick={() => mm.act({ type: 'addBot' })}>add a bot</button>
 	{/if}
 	{#if isHost && pregame}
 		<button type="button" class="go" disabled={vp.teams.length === 0} onclick={() => mm.act({ type: 'forceReady' })}>start season</button>

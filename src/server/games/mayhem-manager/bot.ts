@@ -141,8 +141,11 @@ export function chooseShopping(team: TeamState): void {
 	}
 }
 
-/** The single stat or attunement that most helps this fighter with the gear they'll likely wear. */
-export function chooseTrainingPlan(f: Fighter, keys: string[]): TrainingPlan {
+/**
+ * The single stat or attunement that most helps this fighter with the gear they'll likely wear.
+ * `owned` is all the team's gear, for fighters who won't use gear until they're attuned to it.
+ */
+export function chooseTrainingPlan(f: Fighter, keys: string[], owned: string[] = keys): TrainingPlan {
 	const base = fighterValue(f, keys);
 	let best: TrainingPlan = { kind: 'stat', stat: 'toughness' };
 	let bestGain = -Infinity;
@@ -154,9 +157,11 @@ export function chooseTrainingPlan(f: Fighter, keys: string[]): TrainingPlan {
 			bestGain = gain;
 		}
 	}
-	for (const key of new Set(keys)) {
-		if (f.attunements.includes(key)) continue;
-		const gain = fighterValue({ ...f, attunements: [...f.attunements, key] }, keys) - base;
+	const candidates = f.ability === 'refusesUnattuned' ? owned : keys;
+	for (const key of new Set(candidates)) {
+		if (f.attunements.includes(key) || f.ability === 'cantAttune') continue;
+		const wearing = keys.includes(key) || !canWearTogether([...keys, key]) ? keys : [...keys, key];
+		const gain = fighterValue({ ...f, attunements: [...f.attunements, key] }, wearing) - base;
 		if (gain > bestGain) {
 			best = { kind: 'attune', key };
 			bestGain = gain;
@@ -175,7 +180,7 @@ export function chooseTraining(team: TeamState): void {
 	for (const f of team.fighters) {
 		if (team.training[f.id]) continue;
 		const keys = lineup[f.id].map((id) => gear.find((g) => g.id === id)!.key);
-		team.training[f.id] = chooseTrainingPlan(f, keys);
+		team.training[f.id] = chooseTrainingPlan(f, keys, gear.map((g) => g.key));
 	}
 }
 

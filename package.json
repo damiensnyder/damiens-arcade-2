@@ -9,7 +9,8 @@
 		"preview": "NODE_ENV=production tsx src/server/index.ts",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+		"check:mm-catalog": "tsx scripts/mm-catalog-check.ts"
 	},
 	"dependencies": {
 		"ws": "^8.18.0",

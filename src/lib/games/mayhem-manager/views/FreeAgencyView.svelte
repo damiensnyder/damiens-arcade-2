@@ -38,7 +38,7 @@
 				{@const signedByMe = a.signedBy !== null && a.signedBy === vp.myTeam}
 				<article class="card" class:mine={signedByMe} class:gone={a.signedBy !== null && !signedByMe}>
 					<div class="row between wrap">
-						<div class="row"><h3>{f.name}</h3><span class="muted">age {f.age}</span></div>
+						<div class="row"><h3>{f.name}</h3><span class="muted">age {f.age} · {a.formerTeam !== null ? `formerly of the ${TEAMS[a.formerTeam].last}` : 'rookie'}</span></div>
 						<div class="prices" aria-label="price by day">
 							{#each a.prices as p, i (i)}
 								{#if i > 0}<span aria-hidden="true">›</span>{/if}
@@ -53,11 +53,6 @@
 							<p>{ABILITIES[f.ability]?.description}</p>
 							{#if mm.seasonLine(f.id, vp.season - 1)}
 								<p class="muted small">Last season: {mm.seasonLine(f.id, vp.season - 1, true)}</p>
-							{/if}
-							{#if a.formerTeam !== null}
-								<p class="muted small">formerly of the {TEAMS[a.formerTeam].last}</p>
-							{:else}
-								<p class="muted small">rookie</p>
 							{/if}
 						</div>
 					</div>

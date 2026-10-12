@@ -15,7 +15,11 @@
 	const isHost = $derived(room.host !== null && room.host === room.pov);
 	const label = $derived(phaseLabel(vp.phase, mm.teamCount, mm.playoffRounds));
 	const anyoneWaiting = $derived(vp.teams.some((t) => !t.ready));
+	const canForceReady = $derived(isHost && vp.phase.kind !== 'pregame' && anyoneWaiting);
 	let copied = $state(false);
+	// the room menu opens on hover, or on tap for touch screens
+	let roomOpen = $state(false);
+	let roomEl: HTMLElement | undefined = $state();
 
 	function copyInvite() {
 		navigator.clipboard?.writeText(window.location.href).then(() => {
@@ -55,18 +59,23 @@
 	{/if}
 
 	<div class="row end">
-		{#if vp.phase.kind === 'pregame'}
-			<button type="button" onclick={copyInvite}>{copied ? 'copied!' : 'copy invite link'}</button>
-		{/if}
 		{#if !mine && vp.phase.kind === 'offseason' && !mm.choosingTeam}
 			<button type="button" class="go" onclick={() => (mm.choosingTeam = true)}>join a team</button>
 		{/if}
-		{#if isHost && vp.phase.kind !== 'pregame' && anyoneWaiting}
-			<button type="button" class="host" title="bots make picks for anyone who isn't ready yet" onclick={() => mm.act({ type: 'forceReady' })}>force ready</button>
-		{/if}
-		<span class="code muted small" title="room code">{room.roomCode}</span>
+		<div class="room" class:open={roomOpen} bind:this={roomEl} onpointerleave={(e) => e.pointerType === 'mouse' && (roomOpen = false)}>
+			<button type="button" class="tab" aria-haspopup="true" aria-expanded={roomOpen} onclick={() => (roomOpen = !roomOpen)}>room: {room.roomCode}</button>
+			<div class="room-menu">
+				{#if canForceReady}
+					<button type="button" class="tab" title="bots make picks for anyone who isn't ready yet" onclick={() => mm.act({ type: 'forceReady' })}>force ready</button>
+				{/if}
+				<button type="button" class="tab" onclick={copyInvite}>{copied ? 'copied!' : 'copy invite'}</button>
+				<a class="btn tab" href="/mayhem-manager">leave game</a>
+			</div>
+		</div>
 	</div>
 </header>
+
+<svelte:window onclick={(e) => roomOpen && !roomEl?.contains(e.target as Node) && (roomOpen = false)} />
 
 <style>
 	.topbar {
@@ -113,8 +122,8 @@
 	}
 
 	.tab {
-		background: none !important;
-		border: 2px solid transparent !important;
+		background: #422 !important;
+		border: 2px solid var(--mm-bg) !important;
 		padding: 0.3rem 0.8rem !important;
 		color: #ddd;
 	}
@@ -133,8 +142,30 @@
 		flex-wrap: wrap;
 	}
 
-	.code {
-		font-family: Menlo, monospace;
+	.room {
+		position: relative;
+	}
+
+	.room-menu {
+		display: none;
+		position: absolute;
+		top: 100%;
+		right: 0;
+		z-index: 100;
+		flex-direction: column;
+		gap: 0.3rem;
+		/* padding instead of margin, so the pointer can cross the gap without closing the menu */
+		padding-top: 0.3rem;
+	}
+
+	.room-menu .tab {
+		width: 100%;
+	}
+
+	.room:hover .room-menu,
+	.room:focus-within .room-menu,
+	.room.open .room-menu {
+		display: flex;
 	}
 
 	@media (max-width: 720px) {

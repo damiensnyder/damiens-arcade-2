@@ -25,7 +25,7 @@
 
 	function planLabel(f: Fighter): string {
 		const plan = priv.training[f.id];
-		if (!plan) return 'no plan yet · a bot will pick';
+		if (!plan) return 'select a stat or attunement';
 		return plan.kind === 'stat' ? `training ${plan.stat}` : `attuning to ${EQUIPMENT[plan.key]?.name ?? plan.key}`;
 	}
 
@@ -113,26 +113,30 @@
 								>
 							{/snippet}
 						</StatRows>
-						<div class="attune">
-							<select
-								aria-label="Equipment for {f.name} to attune to"
-								disabled={mine.ready || ownedKeys.every((k) => f.attunements.includes(k))}
-								value={selectedAttune(f)}
-								onchange={(e) => chooseAttune(f, e.currentTarget.value)}
-							>
-								{#if ownedKeys.length === 0}<option value="">no equipment to attune to</option>{/if}
-								{#each ownedKeys as key (key)}
-									<option value={key} disabled={f.attunements.includes(key)}>{EQUIPMENT[key]?.name}{f.attunements.includes(key) ? ' (attuned)' : ''}</option>
-								{/each}
-							</select>
-							<button
-								type="button"
-								class="mini"
-								class:on={plan?.kind === 'attune'}
-								disabled={mine.ready || !selectedAttune(f)}
-								onclick={() => attune(f)}>{plan?.kind === 'attune' ? 'attuning' : 'attune'}</button
-							>
-						</div>
+						{#if f.ability === 'cantAttune'}
+							<p class="muted small">can't attune to equipment</p>
+						{:else}
+							<div class="attune">
+								<select
+									aria-label="Equipment for {f.name} to attune to"
+									disabled={mine.ready || ownedKeys.every((k) => f.attunements.includes(k))}
+									value={selectedAttune(f)}
+									onchange={(e) => chooseAttune(f, e.currentTarget.value)}
+								>
+									{#if ownedKeys.length === 0}<option value="">no equipment to attune to</option>{/if}
+									{#each ownedKeys as key (key)}
+										<option value={key} disabled={f.attunements.includes(key)}>{EQUIPMENT[key]?.name}{f.attunements.includes(key) ? ' (attuned)' : ''}</option>
+									{/each}
+								</select>
+								<button
+									type="button"
+									class="mini"
+									class:on={plan?.kind === 'attune'}
+									disabled={mine.ready || !selectedAttune(f)}
+									onclick={() => attune(f)}>{plan?.kind === 'attune' ? 'attuning' : 'attune'}</button
+								>
+							</div>
+						{/if}
 					</div>
 				</div>
 			</article>

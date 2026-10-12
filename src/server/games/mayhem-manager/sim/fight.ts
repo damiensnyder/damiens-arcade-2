@@ -28,6 +28,8 @@ export interface FightOutcome {
 	winner: TeamId;
 	standing: Map<TeamId, number>;
 	fighters: FighterOutcome[];
+	/** How much each team's money changed during the fight (from looting and the like). */
+	moneyChange: Map<TeamId, number>;
 }
 
 export class Fight {
@@ -36,10 +38,13 @@ export class Fight {
 	readonly ticks: FightEvent[][] = [];
 	private readonly logging: boolean;
 	private tickCount = 0;
+	private readonly money: Map<TeamId, number>;
+	private readonly moneyChange = new Map<TeamId, number>();
 
-	constructor(rng: Rng, combatants: Combatant[], logging: boolean) {
+	constructor(rng: Rng, combatants: Combatant[], logging: boolean, money = new Map<TeamId, number>()) {
 		this.rng = rng;
 		this.logging = logging;
+		this.money = new Map(money);
 		// alternate teams so neither side always spawns (and acts) first
 		const byTeam = new Map<TeamId, Combatant[]>();
 		for (const c of combatants) byTeam.set(c.team, [...(byTeam.get(c.team) ?? []), c]);
@@ -135,6 +140,38 @@ export class Fight {
 		return this.teamsStanding().length <= 1 || this.tickCount * TICK_LENGTH >= MAX_FIGHT_SECONDS;
 	}
 
+	moneyOf(team: TeamId): number {
+		return this.money.get(team) ?? 0;
+	}
+
+	/** Moves up to `amount` dollars from one team (or from nowhere, if null) to another. Returns how much moved. */
+	transferMoney(from: TeamId | null, to: TeamId, amount: number): number {
+		const moved = from === null ? amount : Math.min(amount, this.moneyOf(from));
+		if (moved <= 0) return 0;
+		if (from !== null) {
+			this.money.set(from, this.moneyOf(from) - moved);
+			this.moneyChange.set(from, (this.moneyChange.get(from) ?? 0) - moved);
+		}
+		this.money.set(to, this.moneyOf(to) + moved);
+		this.moneyChange.set(to, (this.moneyChange.get(to) ?? 0) + moved);
+		return moved;
+	}
+
+	/** Runs knockout effects: the victim's own (like shrapnel), the attacker's, then teammates' (like a halo). */
+	knockedOut(victim: BattleFighter, by: BattleFighter): void {
+		for (const item of [...victim.items]) item.behavior.onKnockedOut?.(item, by);
+		if (by.team !== victim.team) {
+			for (const item of [...by.items]) item.behavior.onKo?.(item, victim);
+		}
+		for (const mate of this.fighters) {
+			if (mate === victim || mate.team !== victim.team || mate.hp <= 0) continue;
+			for (const item of [...mate.items]) {
+				if (victim.hp > 0) return;
+				item.behavior.onTeammateKnockedOut?.(item, victim);
+			}
+		}
+	}
+
 	/** Records an event in the current tick (or an earlier one), merging animation updates per fighter. */
 	log(event: FightEvent, ticksAgo = 0): void {
 		if (!this.logging || this.ticks.length === 0) return;
@@ -180,6 +217,7 @@ export class Fight {
 			.sort((a, b) => standing.get(b)! - standing.get(a)! || hpLeft.get(b)! - hpLeft.get(a)!);
 		return {
 			ticks: this.ticks,
+			moneyChange: this.moneyChange,
 			winner: ranked[0],
 			standing,
 			fighters: this.fighters.map((f) => ({
@@ -197,8 +235,13 @@ export class Fight {
 	}
 }
 
-export function simulateFight(rng: Rng, combatants: Combatant[], logging = true): FightOutcome {
-	const fight = new Fight(rng, combatants, logging);
+export function simulateFight(
+	rng: Rng,
+	combatants: Combatant[],
+	logging = true,
+	money?: Map<TeamId, number>
+): FightOutcome {
+	const fight = new Fight(rng, combatants, logging, money);
 	fight.simulate();
 	return fight.outcome();
 }

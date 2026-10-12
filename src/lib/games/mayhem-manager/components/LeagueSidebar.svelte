@@ -30,7 +30,7 @@
 			{#if t.isMine}
 				<ReadyButton />
 			{:else}
-				<span class="status" class:ready={t.ready}>
+				<span class="status">
 					{#if t.controller === 'bot'}<BotIcon size={14} />{/if}
 					{t.ready ? 'ready' : 'not ready'}
 				</span>
@@ -43,7 +43,7 @@
 				<button type="button" onclick={() => confirm('Leave your team? A bot will take over.') && mm.act({ type: 'leave' })}>leave team</button>
 			{/if}
 			{#if isHost && vp.phase.kind === 'offseason' && vp.teams.length < 16}
-				<button type="button" class="host" onclick={() => mm.act({ type: 'addBot' })}>add a bot</button>
+				<button type="button" onclick={() => mm.act({ type: 'addBot' })}>add a bot</button>
 			{/if}
 		</div>
 	{/if}
@@ -92,9 +92,5 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.25rem;
-	}
-
-	.status.ready {
-		color: #eeb;
 	}
 </style>
