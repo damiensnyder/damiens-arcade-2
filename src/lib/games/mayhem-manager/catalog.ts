@@ -61,7 +61,7 @@ const EQUIPMENT_LIST: EquipmentInfo[] = [
 	equipment('battleAxe', 'Battle Axe', ['hand', 'hand'], 40, 'Melee. Deals 70 [attuned: 90] damage. Cooldown 4s.', "learn this secret trick lumberjacks DON'T want you to know"),
 	equipment('diamondSword', 'Diamond Sword', ['hand'], 30, 'Melee. Deals 50 [attuned: 65] damage. Cooldown 3s.', 'Durability: 858/1561; Bane of Arthropods IV'),
 	equipment('rollerBlades', 'Roller Blades', ['feet'], 23, 'Melee. Deals 30 damage. Cooldown 4s. +2 [attuned: +3] speed.'),
-	equipment('theRatioInator', 'The Ratio-Inator', ['hand'], 20, "Melee. All hits reduce the target's HP by 30% [attuned: 40%]. Cooldown 2.5s."),
+	equipment('theRatioInator', 'The Ratio-Inator', ['hand'], 20, "Melee. All hits reduce the target's HP by 30% [attuned: 40%]. Cooldown 2.5s.", 'hold this.'),
 	equipment('headbuttersDelight', "Headbutter's Delight", ['head'], 16, 'Melee. Deals 20 [attuned: 25] damage. Damage scales with toughness instead of strength. Cooldown 3s.'),
 	equipment('shiv', 'Shiv', ['hand'], 14, 'Melee. Deals 16 damage. Cooldown 2s [attuned: 1.5s].'),
 	equipment('moneySword', 'The Money Sword', ['hand'], 12, 'Deals 10 damage for every $8 [attuned: $6] your team has. Cooldown 3s.'),
@@ -76,6 +76,7 @@ const EQUIPMENT_LIST: EquipmentInfo[] = [
 	equipment('cornDog', 'Corn Dog', ['hand'], 12, 'Single-use. Heals 40 HP.', 'surprisingly nutritious'),
 	// other actions
 	equipment('flowerOfPower', 'Flower of Power', ['hand'], 11, 'Heal a teammate for 20 [attuned: 25] HP. Requires 1 charge.'),
+	equipment('foamFinger', 'Foam Finger', ['hand'], 6, 'Make all teammates hyped for 3s [attuned: 4s]. Requires 1 charge.', 'rah rah rah! go team go'),
 	// stat changes
 	equipment('fullSuitOfArmor', 'Full Suit of Armor', ['head', 'torso', 'legs', 'feet'], 24, '+6 [attuned: +7.5] toughness, -1.5 speed.', 'clank. clank. clank. clank'),
 	equipment('sportsJersey', 'Sports Jersey', ['torso'], 22, '+0.5 to all stats for each other teammate still standing.', 'teamwork? i sure hope it does!'),

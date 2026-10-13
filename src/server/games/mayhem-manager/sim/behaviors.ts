@@ -375,8 +375,33 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			}
 		},
 		value: { ehpMultiplier: (attuned) => (attuned ? 1.25 : 1.2) }
+	},
+	foamFinger: {
+		action: {
+			priority: (item) => {
+				const f = item.owner;
+				if (f.cooldown > 0) return 0;
+				return unhypedTeammates(f).length;
+			},
+			perform: (item) => {
+				const f = item.owner;
+				if (f.charges < 1) {
+					f.charge();
+					return;
+				}
+				f.charges -= 1;
+				f.setCooldown(CHARGED_COOLDOWN);
+				for (const t of f.teammates()) if (t !== f) hype(t, item.attuned ? 4 : 3);
+			}
+		},
+		value: { dpsMultiplier: (attuned) => (attuned ? 1.2 : 1.15) }
 	}
 };
+
+/** Teammates (not the fighter themself) who aren't hyped, or whose hype is about to wear off. */
+function unhypedTeammates(f: BattleFighter): BattleFighter[] {
+	return f.teammates().filter((t) => t !== f && !t.effects.some((e) => e.name === 'hyped' && e.remaining > 1));
+}
 
 /** The standing teammate (or the fighter themself) missing the most HP, if anyone's missing enough. */
 function mostHurtTeammate(f: BattleFighter, amount: number): BattleFighter | null {
