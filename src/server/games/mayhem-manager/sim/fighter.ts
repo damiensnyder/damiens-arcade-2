@@ -67,6 +67,11 @@ export class BattleFighter {
 	stats: Stats;
 	items: BattleItem[];
 	effects: StatusEffect[] = [];
+	/**
+	 * What a point of damage is worth this tick, judged by the best attack: its priority over its
+	 * damage per second. Lets item actions that boost damage compare themselves with attacking.
+	 */
+	valuePerDamage = 0;
 	flash = 0;
 	pose: number = Pose.Stationary1;
 
@@ -211,6 +216,19 @@ export class BattleFighter {
 		return perUse / this.cycleTime(option);
 	}
 
+	/** Seconds an item action takes: charging up to `chargesNeeded`, then its cooldown. */
+	actionTime(chargesNeeded: number, cooldown: number): number {
+		return this.timeToCharge() * Math.max(chargesNeeded - this.charges, 0) + Math.max(cooldown - this.cooldownReduction(), TICK_LENGTH);
+	}
+
+	/** danger() if this fighter's stats were changed by `mods`. */
+	dangerWith(mods: Partial<Stats>): number {
+		this.applyMods(mods, 1);
+		const result = this.danger();
+		this.applyMods(mods, -1);
+		return result;
+	}
+
 	/** Roughly how much damage per second this fighter threatens. */
 	danger(): number {
 		let best = 0;
@@ -296,6 +314,7 @@ export class BattleFighter {
 
 		let bestPriority = -Infinity;
 		let bestAction: (() => void) | null = null;
+		let bestDps = 0;
 
 		for (const option of this.attackOptions()) {
 			const dps = this.rawDps(option);
@@ -304,6 +323,7 @@ export class BattleFighter {
 				const priority = allEnemies.reduce((sum, e) => sum + this.valueOfAttacking(e, dps, timeToFirst), 0);
 				if (priority > bestPriority) {
 					bestPriority = priority;
+					bestDps = dps * allEnemies.length;
 					bestAction = () => this.aoeAttack(option);
 				}
 				continue;
@@ -316,15 +336,18 @@ export class BattleFighter {
 				const priority = this.valueOfAttacking(target, dps, timeToFirst);
 				if (priority > bestPriority) {
 					bestPriority = priority;
+					bestDps = dps;
 					bestAction =
 						option.spec.kind === 'melee' ? () => this.meleeAttack(target, option) : () => this.rangedAttack(target, option);
 				}
 			}
 		}
 
+		this.valuePerDamage = bestDps > 0 ? Math.max(bestPriority, 0) / bestDps : 0;
+		// item actions are judged on the same scale as attacks, and only once the fighter can act
 		for (const item of this.items) {
 			const action = item.behavior.action;
-			if (!action) continue;
+			if (!action || this.cooldown > 0) continue;
 			const priority = action.priority(item);
 			if (priority > 0 && priority > bestPriority) {
 				bestPriority = priority;

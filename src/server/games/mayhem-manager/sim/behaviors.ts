@@ -48,7 +48,10 @@ export interface Behavior {
 	targetWeight?: number;
 	/** Extra danger (≈ damage per second) enemies should account for. */
 	passiveDanger?: (item: BattleItem) => number;
-	/** A non-attack action, like eating a corn dog. Priority ≤ 0 means "not now". */
+	/**
+	 * A non-attack action, like eating a corn dog. Priority is on the same scale as attacking (see
+	 * healValue and boostValue); the fighter does whichever is worth more. ≤ 0 means "not now".
+	 */
 	action?: { priority: (item: BattleItem) => number; perform: (item: BattleItem) => void };
 	onFightStart?: (item: BattleItem) => void;
 	/** Runs at the start of every tick while the wearer is standing. */
@@ -87,8 +90,10 @@ function burn(target: BattleFighter, source: BattleFighter, seconds: number): vo
 	target.addEffect({ name: 'burning', remaining: seconds, negative: true, mods: {}, burn: 5, source, tint: [1, 0.5, 0, 0.35] });
 }
 
+const HYPE_MODS: Partial<Stats> = { strength: 4, speed: 4, energy: 4 };
+
 function hype(target: BattleFighter, seconds: number): void {
-	target.addEffect({ name: 'hyped', remaining: seconds, negative: false, mods: { strength: 4, speed: 4, energy: 4 }, tint: [1, 0.9, 0.3, 0.25] });
+	target.addEffect({ name: 'hyped', remaining: seconds, negative: false, mods: HYPE_MODS, tint: [1, 0.9, 0.3, 0.25] });
 }
 
 /** Taunted fighters can only attack the taunter. */
@@ -99,6 +104,40 @@ function taunt(target: BattleFighter, source: BattleFighter): void {
 /** Scared fighters run from the nearest enemy and don't attack or use items. */
 function scare(target: BattleFighter, seconds: number): void {
 	target.addEffect({ name: 'scared', remaining: seconds, negative: true, mods: {}, tint: [0.6, 0.3, 1, 0.3] });
+}
+
+// ---- what item actions are worth ----
+//
+// Attacking a target is worth its danger divided by the time it'd take to knock them out: roughly
+// its danger times the share of its health removed per second. Actions are scored the same way.
+
+/** Healing: the teammate's danger times the share of their health restored, per second spent. */
+function healValue(target: BattleFighter, amount: number, seconds: number): number {
+	const healed = Math.min(amount, 100 - target.hp) / target.damageTakenMultiplier();
+	if (healed <= 0 || target.hp <= 0) return 0;
+	return (target.danger() * healed) / ((target.effectiveHp() + healed) * seconds);
+}
+
+/** Fighters land about half the damage danger() suggests (walking, waiting, missing), per test fights. */
+const REALIZED_DAMAGE = 0.5;
+
+/**
+ * Giving teammates a status effect that changes their stats for a while: the extra damage it lets
+ * them deal, valued like the user's own damage, per second spent. Only time beyond what's left of
+ * the same effect counts.
+ */
+function boostValue(f: BattleFighter, effect: string, mods: Partial<Stats>, duration: number, seconds: number): number {
+	let damage = 0;
+	for (const t of f.teammates()) {
+		if (t === f) continue;
+		const existing = t.effects.find((e) => e.name === effect);
+		const extra = Math.max(duration - (existing?.remaining ?? 0), 0);
+		if (extra <= 0) continue;
+		const negated = Object.fromEntries(Object.entries(mods).map(([k, v]) => [k, -v]));
+		const gain = existing ? t.danger() - t.dangerWith(negated) : t.dangerWith(mods) - t.danger();
+		damage += gain * extra;
+	}
+	return (damage * REALIZED_DAMAGE * f.valuePerDamage) / seconds;
 }
 
 // ---- helpers for effects that change as the fight goes on ----
@@ -142,13 +181,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	bow: { attack: { kind: 'ranged', damage: [50, 65], cooldown: [5, 5], knockback: 1, projectile: '/mm/projectiles/arrow.png' } },
 	cornDog: {
 		action: {
-			priority: (item) => {
-				const f = item.owner;
-				const amount = 40;
-				if (f.cooldown > 0 || f.hp >= 100 - amount / 2) return 0;
-				// worth more the closer the fighter is to going down
-				return (amount / 2 / f.damageTakenMultiplier()) * (f.hp < amount ? 1 : 0.25);
-			},
+			priority: (item) => healValue(item.owner, 40, item.owner.actionTime(0, 2)),
 			perform: (item) => {
 				const f = item.owner;
 				heal(f, 40);
@@ -352,14 +385,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	noveltyArrowHat: { statMods: () => ({ accuracy: 3 }) },
 	flowerOfPower: {
 		action: {
-			priority: (item) => {
-				const f = item.owner;
-				if (f.cooldown > 0) return 0;
-				const amount = item.attuned ? 25 : 20;
-				const target = mostHurtTeammate(f, amount);
-				if (!target) return 0;
-				return (amount / 8) * (target.hp < 40 ? 3 : 1);
-			},
+			priority: (item) => bestHeal(item.owner, item.attuned ? 25 : 20).value,
 			perform: (item) => {
 				const f = item.owner;
 				if (f.charges < 1) {
@@ -367,7 +393,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 					return;
 				}
 				const amount = item.attuned ? 25 : 20;
-				const target = mostHurtTeammate(f, amount);
+				const { target } = bestHeal(f, amount);
 				if (!target) return;
 				f.charges -= 1;
 				f.setCooldown(CHARGED_COOLDOWN);
@@ -378,11 +404,8 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	},
 	foamFinger: {
 		action: {
-			priority: (item) => {
-				const f = item.owner;
-				if (f.cooldown > 0) return 0;
-				return unhypedTeammates(f).length;
-			},
+			priority: (item) =>
+				boostValue(item.owner, 'hyped', HYPE_MODS, item.attuned ? 4 : 3, item.owner.actionTime(1, CHARGED_COOLDOWN)),
 			perform: (item) => {
 				const f = item.owner;
 				if (f.charges < 1) {
@@ -398,16 +421,13 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	}
 };
 
-/** Teammates (not the fighter themself) who aren't hyped, or whose hype is about to wear off. */
-function unhypedTeammates(f: BattleFighter): BattleFighter[] {
-	return f.teammates().filter((t) => t !== f && !t.effects.some((e) => e.name === 'hyped' && e.remaining > 1));
-}
-
-/** The standing teammate (or the fighter themself) missing the most HP, if anyone's missing enough. */
-function mostHurtTeammate(f: BattleFighter, amount: number): BattleFighter | null {
-	let best: BattleFighter | null = null;
+/** The standing teammate (or the fighter themself) it's worth most to heal. */
+function bestHeal(f: BattleFighter, amount: number): { target: BattleFighter | null; value: number } {
+	const seconds = f.actionTime(1, CHARGED_COOLDOWN);
+	let best: { target: BattleFighter | null; value: number } = { target: null, value: 0 };
 	for (const t of f.teammates()) {
-		if (100 - t.hp >= amount && (best === null || t.hp < best.hp)) best = t;
+		const value = healValue(t, amount, seconds);
+		if (value > best.value) best = { target: t, value };
 	}
 	return best;
 }

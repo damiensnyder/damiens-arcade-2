@@ -4,7 +4,7 @@
 //
 //   npx tsx scripts/mm-fight-audit.ts [--snapshots 300] [--fights 20] [variant ...]
 
-import { sanitizeLineup } from '../src/lib/games/mayhem-manager/rules.js';
+import { canWearTogether, sanitizeLineup } from '../src/lib/games/mayhem-manager/rules.js';
 import type { Fighter } from '../src/lib/games/mayhem-manager/types.js';
 import MayhemManager from '../src/server/games/mayhem-manager/index.js';
 import { Rng } from '../src/server/games/mayhem-manager/rng.js';
@@ -30,14 +30,22 @@ const SNAPSHOTS = arg('snapshots', 300);
 /** Replace each roster's gear with this many random catalog items per fighter, handed out by the bots. */
 const GEAR = arg('gear', 0);
 const FIGHTS = arg('fights', 20);
+/** Put this item on one random fighter in every roster (dropping whatever it conflicts with). */
+const GIVE = args.includes('--give') ? args[args.indexOf('--give') + 1] : null;
 const chosen = args.filter((a, i) => !a.startsWith('--') && !args[i - 1]?.startsWith('--'));
 
 function collectSnapshots(count: number): Member[][] {
 	const out: Member[][] = [];
+	let leagueNo = 0;
 	while (out.length < count) {
 		const league = new MayhemManager();
 		league.emitEventTo = () => {};
-		const teams = [4, 8, 12, 16][out.length % 4];
+		// seeded, so every run (and every variant) sees the same rosters
+		const internals = league as unknown as { rng: Rng; s: LeagueState };
+		internals.rng = new Rng([leagueNo + 1, 2, 3, 4]);
+		internals.s.rng = internals.rng.state;
+		leagueNo++;
+		const teams = [4, 8, 12, 16][leagueNo % 4];
 		for (let i = 0; i < teams; i++) league.handleAction(1, { type: 'addBot' }, true);
 		const s = () => (league as unknown as { s: LeagueState }).s;
 		let captured = 0;
@@ -63,6 +71,15 @@ function collectSnapshots(count: number): Member[][] {
 			const gear = Array.from({ length: Math.round(GEAR * snap.length) }, (_, i) => ({ id: i, key: rng.pick(EQUIPMENT_KEYS) }));
 			const lineup = assignLineup(snap.map((m) => m.fighter), gear);
 			for (const m of snap) m.keys = lineup[m.fighter.id].map((id) => gear[id].key);
+		}
+	}
+	if (GIVE) {
+		const rng = new Rng([7, 7, 7, 7]);
+		for (const snap of result) {
+			const m = snap[rng.int(0, snap.length - 1)];
+			const keys = [GIVE];
+			for (const k of m.keys) if (canWearTogether([...keys, k])) keys.push(k);
+			m.keys = keys;
 		}
 	}
 	return result;
@@ -216,6 +233,32 @@ function fight(snap: Member[], rng: Rng): { won: boolean; seconds: number } {
 	return { won: out.winner === 0, seconds: ticks * TICK_LENGTH };
 }
 
+// usage: for each action item, fighters who had it in a fight, and how many of them used it
+const equipped: Record<string, number> = {};
+const used: Record<string, number> = {};
+const usedThisFight = new Set<object>();
+for (const [key, b] of Object.entries(EQUIPMENT_BEHAVIORS)) {
+	if (!b.action) continue;
+	const perform = b.action.perform;
+	b.action.perform = (item) => {
+		const before = item.owner.charges;
+		perform(item);
+		if (item.owner.charges < before || !item.owner.items.includes(item)) usedThisFight.add(item);
+	};
+	const start = b.onFightStart;
+	b.onFightStart = (item) => {
+		if (item.owner.team === 1) equipped[key] = (equipped[key] ?? 0) + 1;
+		start?.(item);
+	};
+}
+const recordUse = () => {
+	for (const item of usedThisFight) {
+		const it = item as { key: string; owner: { team: number } };
+		if (it.owner.team === 1) used[it.key] = (used[it.key] ?? 0) + 1;
+	}
+	usedThisFight.clear();
+};
+
 const snapshots = collectSnapshots(SNAPSHOTS);
 const sizes: Record<number, number> = {};
 for (const s of snapshots) sizes[s.length] = (sizes[s.length] ?? 0) + 1;
@@ -229,6 +272,13 @@ for (const name of chosen.length ? chosen : Object.keys(VARIANTS)) {
 		const orig = b.action!.priority;
 		(b as { __orig?: unknown }).__orig = orig;
 		b.action!.priority = (item) => (item.owner.team === 0 ? 0 : orig(item));
+	} else if (base === 'boostAction') {
+		// scale an item action's priority by a factor, for team 0
+		const [key, factor] = param.split('x');
+		const b = EQUIPMENT_BEHAVIORS[key];
+		const orig = b.action!.priority;
+		(b as { __orig?: unknown }).__orig = orig;
+		b.action!.priority = (item) => orig(item) * (item.owner.team === 0 ? Number(factor) : 1);
 	} else VARIANTS[name]();
 	const rng = new Rng([1, 2, 3, 4]);
 	let wins = 0;
@@ -237,6 +287,7 @@ for (const name of chosen.length ? chosen : Object.keys(VARIANTS)) {
 	for (const snap of snapshots) {
 		for (let i = 0; i < FIGHTS; i++) {
 			const r = fight(snap, rng);
+			recordUse();
 			wins += r.won ? 1 : 0;
 			seconds += r.seconds;
 			n++;
@@ -247,3 +298,6 @@ for (const name of chosen.length ? chosen : Object.keys(VARIANTS)) {
 	const se = Math.sqrt((p * (1 - p)) / n);
 	console.log(`${name.padEnd(20)} ${(100 * p).toFixed(1)}% ±${(100 * se).toFixed(1)}   avg ${(seconds / n).toFixed(1)}s`);
 }
+// team 1 always plays the unchanged policy
+console.log('action items used (by the unchanged side), share of fights where the holder used it at least once:');
+for (const key of Object.keys(equipped)) console.log(`  ${key.padEnd(16)} ${((100 * (used[key] ?? 0)) / equipped[key]).toFixed(0)}% of ${equipped[key]}`);
