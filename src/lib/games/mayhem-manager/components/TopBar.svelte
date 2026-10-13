@@ -16,6 +16,8 @@
 	const label = $derived(phaseLabel(vp.phase, mm.teamCount, mm.playoffRounds));
 	const anyoneWaiting = $derived(vp.teams.some((t) => !t.ready));
 	const canForceReady = $derived(isHost && vp.phase.kind !== 'pregame' && anyoneWaiting);
+	// with nobody running a team, the league only moves on when the host says so (bots are always ready)
+	const hostMustContinue = $derived(isHost && vp.phase.kind !== 'pregame' && vp.teams.every((t) => t.controller === 'bot'));
 	let copied = $state(false);
 	// the room menu opens on hover, or on tap for touch screens
 	let roomOpen = $state(false);
@@ -59,6 +61,9 @@
 	{/if}
 
 	<div class="row end">
+		{#if hostMustContinue}
+			<button type="button" class="go" title="nobody's running a team, so the league moves on when you say so" onclick={() => mm.act({ type: 'forceReady' })}>continue</button>
+		{/if}
 		{#if !mine && vp.phase.kind === 'offseason' && !mm.choosingTeam}
 			<button type="button" class="go" onclick={() => (mm.choosingTeam = true)}>join a team</button>
 		{/if}

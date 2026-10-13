@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
+	import AbilityText from '../components/AbilityText.svelte';
 	import ActionBar from '../components/ActionBar.svelte';
 	import FighterSprite from '../components/FighterSprite.svelte';
 	import GearCard from '../components/GearCard.svelte';
@@ -9,10 +10,9 @@
 	import StatRows from '../components/StatRows.svelte';
 	import TeamLogo from '../components/TeamLogo.svelte';
 	import WaitingOn from '../components/WaitingOn.svelte';
-	import { ABILITIES } from '../catalog.js';
 	import { FA_CONTRACT_YEARS } from '../rules.js';
 	import type { MMState } from '../state.svelte.js';
-	import { yearsLeft } from '../summaries.js';
+	import { freeAgentOrigin, yearsLeft } from '../summaries.js';
 	import { TEAMS } from '../teams.js';
 
 	const mm = getContext<MMState>('mm');
@@ -38,7 +38,7 @@
 				{@const signedByMe = a.signedBy !== null && a.signedBy === vp.myTeam}
 				<article class="card" class:mine={signedByMe} class:gone={a.signedBy !== null && !signedByMe}>
 					<div class="row between wrap">
-						<div class="row"><h3>{f.name}</h3><span class="muted">age {f.age} · {a.formerTeam !== null ? `formerly of the ${TEAMS[a.formerTeam].last}` : 'rookie'}</span></div>
+						<div class="row"><h3>{f.name}</h3><span class="muted">age {f.age} · {freeAgentOrigin(a)}</span></div>
 						<div class="prices" aria-label="price by day">
 							{#each a.prices as p, i (i)}
 								{#if i > 0}<span aria-hidden="true">›</span>{/if}
@@ -50,7 +50,7 @@
 						<span class="big-sprite"><FighterSprite look={f.look} team={a.signedBy} size={120} /></span>
 						<StatRows stats={f.stats} />
 						<div class="desc">
-							<p>{ABILITIES[f.ability]?.description}</p>
+							<AbilityText ability={f.ability} />
 							{#if mm.seasonLine(f.id, vp.season - 1)}
 								<p class="muted small">Last season: {mm.seasonLine(f.id, vp.season - 1, true)}</p>
 							{/if}

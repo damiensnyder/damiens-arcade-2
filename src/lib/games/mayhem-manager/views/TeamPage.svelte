@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
+	import AbilityText from '../components/AbilityText.svelte';
 	import FighterSprite from '../components/FighterSprite.svelte';
 	import StatRows from '../components/StatRows.svelte';
 	import TeamLogo from '../components/TeamLogo.svelte';
-	import { ABILITIES, EQUIPMENT, equipmentIcon, slotsToString } from '../catalog.js';
+	import { EQUIPMENT, equipmentIcon, slotsToString } from '../catalog.js';
 	import { ordinal, roundName } from '../rules.js';
 	import type { MMState } from '../state.svelte.js';
 	import { playoffResult, yearsLeft } from '../summaries.js';
@@ -94,7 +95,7 @@
 					<div class="fbody">
 						<span class="big-sprite"><FighterSprite look={f.look} team={teamId} size={100} /></span>
 						<div class="mid">
-							{#if ABILITIES[f.ability]?.description}<p>{ABILITIES[f.ability].description}</p>{/if}
+							<AbilityText ability={f.ability} />
 							{#if mm.seasonLine(f.id)}<p class="small">this season: {mm.seasonLine(f.id, vp.season, true)}</p>{/if}
 							<p class="muted small">career: {mm.careerLine(f.id)}</p>
 							{#if f.attunements.length > 0}<p class="muted small">attuned: {f.attunements.map((k) => EQUIPMENT[k]?.name ?? k).join(', ')}</p>{/if}

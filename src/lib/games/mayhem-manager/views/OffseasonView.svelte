@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
+	import AbilityText from '../components/AbilityText.svelte';
 	import ActionBar from '../components/ActionBar.svelte';
 	import EquipmentCard from '../components/EquipmentCard.svelte';
 	import FighterSprite from '../components/FighterSprite.svelte';
@@ -9,7 +10,6 @@
 	import RosterCard from '../components/RosterCard.svelte';
 	import StatRows from '../components/StatRows.svelte';
 	import WaitingOn from '../components/WaitingOn.svelte';
-	import { ABILITIES } from '../catalog.js';
 	import { REPAIR_YEARS, RESIGN_CONTRACT_YEARS } from '../rules.js';
 	import type { MMState } from '../state.svelte.js';
 	import { seasonRecap, yearsLeft } from '../summaries.js';
@@ -35,7 +35,7 @@
 
 		<div class="row between wrap">
 			<h3>Re-sign fighters</h3>
-			<span class="muted small">re-sign for {RESIGN_CONTRACT_YEARS} seasons. unsigned fighters become free agents.</span>
+			<span class="muted small">re-sign for {RESIGN_CONTRACT_YEARS} seasons. the rest become free agents, if they're among the best available.</span>
 		</div>
 		{#if mine.expiring.length === 0}
 			<p class="muted">Nobody's contract is up this year.</p>
@@ -65,7 +65,7 @@
 					<span class="big-sprite"><FighterSprite look={f.look} team={mine.id} size={130} /></span>
 					<StatRows stats={f.stats} />
 					<div class="desc">
-						<p>{ABILITIES[f.ability]?.description}</p>
+						<AbilityText ability={f.ability} />
 						{#if mm.seasonLine(f.id, vp.season - 1)}
 							<p class="muted small">Last season: {mm.seasonLine(f.id, vp.season - 1, true)}</p>
 						{/if}

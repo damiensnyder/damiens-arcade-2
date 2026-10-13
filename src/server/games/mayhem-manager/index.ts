@@ -13,10 +13,13 @@ import {
 	STARTING_MONEY,
 	canWearTogether,
 	computeStandings,
+	fighterPrice,
+	freeAgentPrices,
 	playoffRoundCount,
 	repairPrice,
 	playoffSize,
 	regularSeasonWeeks,
+	resignPrice,
 	sanitizeLineup
 } from '../../../lib/games/mayhem-manager/rules.js';
 import {
@@ -25,6 +28,7 @@ import {
 	type Decision,
 	type Fighter,
 	type FightLog,
+	type FreeAgent,
 	type Match,
 	type MMPrivateEvent,
 	type MMViewpointWire,
@@ -40,11 +44,22 @@ import {
 } from '../../../lib/games/mayhem-manager/types.js';
 import { packHistory, packStatLines, packTotals } from '../../../lib/games/mayhem-manager/wire.js';
 import { chooseLineup, chooseShopping, chooseSignings, chooseTraining, decideOffseason } from './bot.js';
-import { concernedOwner, generateFighter, generateShop } from './generate.js';
+import { concernedOwner, develop, earlierClasses, generateFighter, generateShop } from './generate.js';
 import { Rng } from './rng.js';
 import { simulateFight, type Combatant } from './sim/fight.js';
 import { checkLeague, leagueSchema, type LeagueState, type TeamState } from './state.js';
 import { contractWorth } from './valuation.js';
+
+/** A new league starts with this many earlier rookie classes, as well as this season's. */
+const EARLIER_CLASSES = 8;
+/**
+ * How many free agents are offered: enough that their last-day prices add up to this share of
+ * all teams' money. Teams also pay more on earlier days and spend on equipment, so most get signed
+ * without the pool running dry.
+ */
+const FA_SUPPLY = 1;
+/** Free agents offered per team, at the least. */
+const MIN_FA_PER_TEAM = 2;
 
 export default class MayhemManager extends GameLogicHandler {
 	emptyRoomTtlMs = 60 * 60 * 1000; // leagues take a while; give people time to come back
@@ -356,16 +371,23 @@ export default class MayhemManager extends GameLogicHandler {
 	private startFirstSeason(): void {
 		this.evenOutTeams();
 		this.s.season = 1;
-		// the first season's pool has to stock every team from scratch
-		const count = this.s.teams.length * 4 + 4;
-		for (let i = 0; i < count; i++) {
-			this.s.freeAgents.push(this.newFreeAgent(generateFighter(this.rng, this.nextId(), 20, 30), null));
-		}
+		const classes = earlierClasses(this.rng, () => this.nextId(), this.s.teams.length, EARLIER_CLASSES);
+		this.s.freeAgents = classes.map((f) => this.newFreeAgent(f, null));
+		this.addRookies();
+		this.chooseFreeAgents();
 		this.startFreeAgency();
 	}
 
-	private newFreeAgent(fighter: Fighter, formerTeam: TeamId | null) {
-		return { fighter, prices: [], formerTeam, signedBy: null, signedPrice: null };
+	private newFreeAgent(fighter: Fighter, formerTeam: TeamId | null, rookie = false): FreeAgent {
+		return { fighter, prices: [], formerTeam, rookie, signedBy: null, signedPrice: null };
+	}
+
+	/** One rookie per team each season. Teams that join during the offseason get theirs late. */
+	private addRookies(): void {
+		const have = this.s.freeAgents.filter((a) => a.rookie).length;
+		for (let i = have; i < this.s.teams.length; i++) {
+			this.s.freeAgents.push(this.newFreeAgent(generateFighter(this.rng, this.nextId()), null, true));
+		}
 	}
 
 	// ---- offseason ----
@@ -382,11 +404,7 @@ export default class MayhemManager extends GameLogicHandler {
 			}
 			team.expiring = team.fighters
 				.filter((f) => f.contractYears <= 0)
-				.map((fighter) => ({
-					fighter,
-					ask: Math.max(3, Math.round(contractWorth(fighter) * 1.15 + this.rng.int(-3, 3))),
-					decision: 'pending' as Decision
-				}));
+				.map((fighter) => ({ fighter, ask: resignPrice(fighter), decision: 'pending' as Decision }));
 			team.fighters = team.fighters.filter((f) => f.contractYears > 0);
 			for (const e of team.equipment) {
 				e.yearsLeft--;
@@ -403,12 +421,12 @@ export default class MayhemManager extends GameLogicHandler {
 			team.money = Math.ceil(team.money / 2) + SEASON_INCOME;
 			team.lineup = sanitizeLineup(team.fighters, team.equipment, team.lineup);
 		}
-		// this year's rookies, so people can see who's coming
-		const rookies = Math.ceil(this.s.teams.length * 1.5) + 2;
-		this.s.freeAgents = [];
-		for (let i = 0; i < rookies; i++) {
-			this.s.freeAgents.push(this.newFreeAgent(generateFighter(this.rng, this.nextId(), 20, 24), null));
+		// last season's unsigned fighters are a year older; this year's rookies arrive now so people can see who's coming
+		for (const agent of this.s.freeAgents) {
+			agent.fighter.age++;
+			agent.rookie = false;
 		}
+		this.addRookies();
 		this.resetReady();
 		this.botsTakeTurns();
 	}
@@ -457,15 +475,36 @@ export default class MayhemManager extends GameLogicHandler {
 		}
 		// teams can join during the offseason, so the count may be odd again
 		this.evenOutTeams();
+		this.addRookies();
+		this.chooseFreeAgents();
 		this.startFreeAgency();
+	}
+
+	/**
+	 * The best of the rookies and unsigned fighters are offered in free agency, as many as teams can
+	 * afford (see FA_SUPPLY). The rest leave the league. "Best" counts age, so promising rookies
+	 * make the cut and declining veterans eventually retire.
+	 */
+	private chooseFreeAgents(): void {
+		const budget = this.s.teams.reduce((sum, t) => sum + t.money, 0) * FA_SUPPLY;
+		const minimum = this.s.teams.length * MIN_FA_PER_TEAM;
+		const ranked = this.s.freeAgents
+			.map((agent) => ({ agent, worth: contractWorth(agent.fighter), price: fighterPrice(agent.fighter) }))
+			.sort((a, b) => b.worth - a.worth || b.price - a.price);
+		let total = 0;
+		let count = 0;
+		while (count < ranked.length && (count < minimum || total < budget)) {
+			total += ranked[count].price;
+			count++;
+		}
+		this.s.freeAgents = ranked.slice(0, count).map((r) => r.agent);
 	}
 
 	// ---- free agency ----
 
 	private startFreeAgency(): void {
 		for (const agent of this.s.freeAgents) {
-			const first = Math.max(5, Math.round(contractWorth(agent.fighter) * 1.3 + this.rng.int(-4, 4)));
-			agent.prices = [first, Math.max(3, Math.round(first * 0.7)), Math.max(2, Math.round(first * 0.5))];
+			agent.prices = freeAgentPrices(agent.fighter);
 			agent.fighter.contractYears = 0;
 		}
 		this.s.freeAgents.sort((a, b) => b.prices[0] - a.prices[0]);
@@ -504,8 +543,9 @@ export default class MayhemManager extends GameLogicHandler {
 			this.botsTakeTurns();
 			return;
 		}
-		// anyone unsigned after the last day leaves the league
-		this.s.freeAgents = [];
+		// the unsigned stick around, in case they're among the best on offer next season
+		this.s.freeAgents = this.s.freeAgents.filter((a) => a.signedBy === null);
+		for (const agent of this.s.freeAgents) agent.prices = [];
 		this.startTraining();
 	}
 
@@ -544,7 +584,7 @@ export default class MayhemManager extends GameLogicHandler {
 		if (!fighter) return false;
 		if (plan?.kind === 'stat' && fighter.stats[plan.stat] >= MAX_STAT) return false;
 		if (plan?.kind === 'attune') {
-			if (fighter.ability === 'cantAttune') return false;
+			if (fighter.ability === 'cantAttune' || !EQUIPMENT[plan.key]?.attunable) return false;
 			const owned = [...team.equipment.map((e) => e.key), ...team.shop.filter((s) => s.bought).map((s) => s.key)];
 			if (!owned.includes(plan.key) || fighter.attunements.includes(plan.key)) return false;
 		}
@@ -564,7 +604,7 @@ export default class MayhemManager extends GameLogicHandler {
 				const plan = team.training[f.id];
 				if (plan?.kind === 'stat') f.stats[plan.stat] = Math.min(f.stats[plan.stat] + 1, MAX_STAT);
 				else if (plan?.kind === 'attune' && !f.attunements.includes(plan.key)) f.attunements.push(plan.key);
-				this.develop(f);
+				develop(this.rng, f);
 			}
 			for (const mentor of team.fighters.filter((f) => f.ability === 'mentor')) {
 				const younger = team.fighters.filter((f) => f.age < mentor.age);
@@ -578,18 +618,9 @@ export default class MayhemManager extends GameLogicHandler {
 			team.training = {};
 			team.lineup = sanitizeLineup(team.fighters, team.equipment, team.lineup);
 		}
+		// fighters without a team keep developing too
+		for (const agent of this.s.freeAgents) develop(this.rng, agent.fighter);
 		this.startRegularSeason();
-	}
-
-	/** Random development that favors the young. */
-	private develop(f: Fighter): void {
-		for (const stat of STAT_NAMES) {
-			if (this.rng.real() >= 0.5) continue;
-			let change = (2 / 3) * (this.rng.real() + this.rng.real() + this.rng.real() - 1.5);
-			if (f.age <= 23 || f.age >= 33) change *= 2;
-			change += (25 - f.age) / 12;
-			f.stats[stat] = Math.min(Math.max(f.stats[stat] + Math.round(change), 0), MAX_STAT);
-		}
 	}
 
 	// ---- the regular season and playoffs ----

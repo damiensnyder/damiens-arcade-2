@@ -1,7 +1,7 @@
 // Decisions for teams run by bots (and for people who get force-readied).
 // Everything is judged in "value dollars": powerToDollars() of each fighter's best loadout.
 
-import { MAX_STAT, canWearTogether } from '../../../lib/games/mayhem-manager/rules.js';
+import { FA_CONTRACT_YEARS, MAX_STAT, RESIGN_CONTRACT_YEARS, canWearTogether } from '../../../lib/games/mayhem-manager/rules.js';
 import { EQUIPMENT } from '../../../lib/games/mayhem-manager/catalog.js';
 import { STAT_NAMES, type Equipment, type Fighter, type FreeAgent, type TrainingPlan } from '../../../lib/games/mayhem-manager/types.js';
 import type { TeamState } from './state.js';
@@ -49,7 +49,16 @@ export function teamValue(fighters: Fighter[], gear: Gear[]): number {
 /** How many fighters bots try to have. There's no limit, but bigger rosters get expensive. */
 const ROSTER_TARGET = 4;
 /** Roughly what a decent free agent costs, for budgeting. */
-const TYPICAL_SIGNING = 30;
+const TYPICAL_SIGNING = 50;
+
+/**
+ * What a bot would pay for a fighter on a free-agent contract. Prices start at $25 for anyone,
+ * so this does too; past that it's fit to fighterPrice() across typical fighters, but follows the
+ * bots' own valuation, which also accounts for age, equipment and what abilities do in a fight.
+ */
+function fairPrice(f: Fighter): number {
+	return 25 + 0.8 * contractWorth(f);
+}
 
 /**
  * Re-sign fighters and repair equipment that are worth it. Fighters come first: equipment
@@ -59,11 +68,12 @@ const TYPICAL_SIGNING = 30;
 export function decideOffseason(team: TeamState): void {
 	const pending = team.expiring
 		.filter((c) => c.decision === 'pending')
-		.sort((a, b) => contractWorth(b.fighter) / b.ask - contractWorth(a.fighter) / a.ask);
+		.sort((a, b) => fairPrice(b.fighter) / b.ask - fairPrice(a.fighter) / a.ask);
 	for (const c of pending) {
 		const rosterAfter = team.fighters.length + team.expiring.filter((x) => x.decision === 'keep').length;
 		// re-signing a known fighter at a fair price beats gambling on free agency
-		const fair = contractWorth(c.fighter) >= c.ask * (rosterAfter < ROSTER_TARGET ? 0.75 : 0.95);
+		const worth = (fairPrice(c.fighter) * RESIGN_CONTRACT_YEARS) / FA_CONTRACT_YEARS;
+		const fair = worth >= c.ask * (rosterAfter < ROSTER_TARGET ? 0.85 : 1);
 		if (fair && c.ask <= team.money && rosterAfter < ROSTER_TARGET + 2) {
 			c.decision = 'keep';
 			team.money -= c.ask;
@@ -95,13 +105,14 @@ export function decideOffseason(team: TeamState): void {
 export function chooseSignings(team: TeamState, agents: FreeAgent[], day: number, lastDay: number): FreeAgent[] {
 	const priceToday = (a: FreeAgent) => a.prices[day - 1];
 	const target = team.money > 260 ? ROSTER_TARGET + 1 : ROSTER_TARGET;
-	const threshold = day === 1 ? 0.8 : day === lastDay ? 1.3 : 1.0;
+	// prices come down each day, so early on only bargains are worth the risk of waiting
+	const threshold = day === lastDay ? 1.25 : 1;
 	let money = team.money;
 	let roster = team.fighters.length;
 	const picks: FreeAgent[] = [];
 	const candidates = agents
 		.filter((a) => a.signedBy === null)
-		.sort((a, b) => contractWorth(b.fighter) / priceToday(b) - contractWorth(a.fighter) / priceToday(a));
+		.sort((a, b) => fairPrice(b.fighter) / priceToday(b) - fairPrice(a.fighter) / priceToday(a));
 	for (const a of candidates) {
 		if (roster >= target) break;
 		const price = priceToday(a);
@@ -109,7 +120,7 @@ export function chooseSignings(team: TeamState, agents: FreeAgent[], day: number
 		// keep some money for equipment in training camp, once there are enough fighters to wear it
 		const reserve = roster >= 2 ? 35 : 0;
 		if (price > money || (!desperate && money - price < reserve)) continue;
-		if (!desperate && price > contractWorth(a.fighter) * threshold) continue;
+		if (!desperate && price > fairPrice(a.fighter) * threshold) continue;
 		picks.push(a);
 		money -= price;
 		roster++;
@@ -159,7 +170,7 @@ export function chooseTrainingPlan(f: Fighter, keys: string[], owned: string[] =
 	}
 	const candidates = f.ability === 'refusesUnattuned' ? owned : keys;
 	for (const key of new Set(candidates)) {
-		if (f.attunements.includes(key) || f.ability === 'cantAttune') continue;
+		if (f.attunements.includes(key) || f.ability === 'cantAttune' || !EQUIPMENT[key]?.attunable) continue;
 		const wearing = keys.includes(key) || !canWearTogether([...keys, key]) ? keys : [...keys, key];
 		const gain = fighterValue({ ...f, attunements: [...f.attunements, key] }, wearing) - base;
 		if (gain > bestGain) {

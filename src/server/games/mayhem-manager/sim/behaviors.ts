@@ -70,6 +70,9 @@ export interface Behavior {
 	value?: ValueHints;
 }
 
+/** Cooldown for equipment that uses charges, unless its description says otherwise. */
+const CHARGED_COOLDOWN = 1;
+
 const at = <T>(item: BattleItem, pair: [T, T]): T => (item.attuned ? pair[1] : pair[0]);
 const ALL_STATS = (n: number): Stats => ({ strength: n, accuracy: n, energy: n, speed: n, toughness: n });
 
@@ -141,20 +144,20 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		action: {
 			priority: (item) => {
 				const f = item.owner;
-				const amount = item.attuned ? 60 : 40;
+				const amount = 40;
 				if (f.cooldown > 0 || f.hp >= 100 - amount / 2) return 0;
 				// worth more the closer the fighter is to going down
 				return (amount / 2 / f.damageTakenMultiplier()) * (f.hp < amount ? 1 : 0.25);
 			},
 			perform: (item) => {
 				const f = item.owner;
-				heal(f, item.attuned ? 60 : 40);
+				heal(f, 40);
 				f.setCooldown(Math.max(f.cooldown, 2));
 				f.removeItem(item);
 				f.log({ type: 'animation', fighter: f.index, updates: { equipment: f.wornKeys() } });
 			}
 		},
-		value: { ehpMultiplier: (attuned) => (attuned ? 1.6 : 1.4) }
+		value: { ehpMultiplier: () => 1.4 }
 	},
 	devilHorns: {
 		statMods: (attuned) => {
@@ -182,7 +185,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	fullSuitOfArmor: { statMods: (attuned) => ({ toughness: attuned ? 15 : 12, speed: -3 }) },
 	jellyhat: {
 		onHitTaken: (item, attacker, _damage, source) => {
-			if (source.behavior.attack?.kind === 'melee') item.owner.dealDamage(attacker, item.attuned ? 15 : 10);
+			if (source.behavior.attack?.kind === 'melee') zap(item.owner, attacker, item.attuned ? 15 : 10);
 		},
 		value: { bonusDps: (attuned) => (attuned ? 3.5 : 2.5) }
 	},
@@ -210,7 +213,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	},
 	shiv: { attack: { kind: 'melee', damage: [16, 16], cooldown: [2, 1.5], knockback: 1 } },
 	snowmanHead: {
-		attack: { kind: 'ranged', damage: [10, 10], cooldown: [1.5, 1.5], knockback: 0.5, projectile: '/mm/projectiles/snowball.png' },
+		attack: { kind: 'ranged', damage: [12, 12], cooldown: [1.5, 1.5], knockback: 0.5, projectile: '/mm/projectiles/snowball.png' },
 		onHitDealt: (item, target, _damage, source) => {
 			if (source === item) freeze(target, item.attuned ? 2 : 1);
 		},
@@ -220,9 +223,9 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		onTick: (item) => {
 			const f = item.owner;
 			const others = f.teammates().filter((t) => t !== f).length;
-			setAllStatsBonus(item, 1 * (others + (item.attuned ? 1 : 0)));
+			setAllStatsBonus(item, others);
 		},
-		value: { dpsMultiplier: (attuned) => (attuned ? 1.18 : 1.12), ehpMultiplier: (attuned) => (attuned ? 1.12 : 1.08) }
+		value: { dpsMultiplier: () => 1.12, ehpMultiplier: () => 1.08 }
 	},
 	vikingHelmet: {
 		statMods: () => ({ toughness: 2 }),
@@ -239,16 +242,16 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	wandOfFlames: {
 		attack: {
 			kind: 'aoe',
-			damage: [40, 50],
-			cooldown: [1, 1],
+			damage: [50, 60],
+			cooldown: [CHARGED_COOLDOWN, CHARGED_COOLDOWN],
 			charges: [3, 3],
 			knockback: 1,
 			projectile: '/mm/projectiles/fireball.png'
 		},
 		onHitDealt: (item, target, _damage, source) => {
-			if (source === item) burn(target, item.owner, 4);
+			if (source === item) burn(target, item.owner, 5);
 		},
-		value: { bonusDps: (_attuned, attacksPerSecond) => 20 * 2 * attacksPerSecond }
+		value: { bonusDps: (_attuned, attacksPerSecond) => 25 * 2 * attacksPerSecond }
 	},
 	zapHelmet: {
 		passiveDanger: (item) => (item.attuned ? 20 : 15) / 3,
@@ -263,7 +266,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		value: { bonusDps: (attuned) => (attuned ? 20 : 15) / 3 }
 	},
 	headbuttersDelight: {
-		attack: { kind: 'melee', damage: [20, 25], cooldown: [2.5, 2.5], knockback: 1.5, scalesWith: 'toughness' }
+		attack: { kind: 'melee', damage: [20, 25], cooldown: [3, 3], knockback: 1.5, scalesWith: 'toughness' }
 	},
 	chainsawHeadband: {
 		passiveDanger: (item) => (item.attuned ? 5 : 4),
@@ -290,18 +293,18 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		onTeammateKnockedOut: (item, teammate) => {
 			const f = item.owner;
 			if (f.hp <= 0 || teammate.hp > 0) return;
-			teammate.hp = item.attuned ? 50 : 40;
+			teammate.hp = 50;
 			f.removeItem(item);
 			f.log({ type: 'animation', fighter: f.index, updates: { equipment: f.wornKeys() } });
 			teammate.log({ type: 'animation', fighter: teammate.index, updates: { hp: teammate.hp } });
 			teammate.log({ type: 'text', fighter: teammate.index, text: 'revived!', color: '#eeb' });
 		},
-		value: { ehpMultiplier: (attuned) => (attuned ? 1.3 : 1.25) }
+		value: { ehpMultiplier: () => 1.3 }
 	},
 	eyepatch: {
 		onKo: (item, victim) => {
 			const f = item.owner;
-			const loot = f.fight.transferMoney(victim.team, f.team, item.attuned ? 3 : 2);
+			const loot = f.fight.transferMoney(victim.team, f.team, item.attuned ? 4 : 2);
 			if (loot > 0) f.log({ type: 'text', fighter: f.index, text: `+$${loot}`, color: '#eeb' });
 		}
 	},
@@ -310,10 +313,10 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			const f = item.owner;
 			f.log({ type: 'particle', fighter: f.index, img: '/mm/damage.png' });
 			for (const other of f.fight.fighters) {
-				if (other !== f && other.hp > 0 && f.distanceTo(other) <= 10) zap(f, other, item.attuned ? 40 : 30);
+				if (other !== f && other.hp > 0 && f.distanceTo(other) <= 10) zap(f, other, 40);
 			}
 		},
-		value: { bonusDps: (attuned) => (attuned ? 2 : 1.5) }
+		value: { bonusDps: () => 2 }
 	},
 	knifeShoes: {
 		onTick: (item) => {
@@ -327,7 +330,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		value: { bonusDps: (attuned) => (attuned ? 1.8 : 1.5) }
 	},
 	censoredBar: {
-		blocksEffect: (item, effect) => !item.attuned || effect.negative,
+		blocksEffect: (_item, effect) => effect.negative,
 		value: { ehpMultiplier: () => 1.08 }
 	},
 	theRatioInator: {
@@ -341,15 +344,18 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			damageAt: (item, target) => Math.ceil(Math.max(target.hp, 0) * (item.attuned ? 0.4 : 0.3))
 		}
 	},
-	speedo: { statMods: (attuned) => ({ speed: attuned ? 3 : 2 }) },
-	steelToedBoots: { attack: { kind: 'melee', damage: [20, 20], cooldown: [4, 4], knockback: [3, 5] } },
-	noveltyArrowHat: { statMods: (attuned) => ({ accuracy: attuned ? 3 : 2 }) },
+	speedo: { statMods: () => ({ speed: 2 }) },
+	steelToedBoots: {
+		attack: { kind: 'melee', damage: [20, 25], cooldown: [3.5, 3.5], knockback: 1 },
+		statMods: () => ({ toughness: 2 })
+	},
+	noveltyArrowHat: { statMods: () => ({ accuracy: 3 }) },
 	flowerOfPower: {
 		action: {
 			priority: (item) => {
 				const f = item.owner;
 				if (f.cooldown > 0) return 0;
-				const amount = item.attuned ? 20 : 15;
+				const amount = item.attuned ? 25 : 20;
 				const target = mostHurtTeammate(f, amount);
 				if (!target) return 0;
 				return (amount / 8) * (target.hp < 40 ? 3 : 1);
@@ -360,11 +366,11 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 					f.charge();
 					return;
 				}
-				const amount = item.attuned ? 20 : 15;
+				const amount = item.attuned ? 25 : 20;
 				const target = mostHurtTeammate(f, amount);
 				if (!target) return;
 				f.charges -= 1;
-				f.setCooldown(1);
+				f.setCooldown(CHARGED_COOLDOWN);
 				heal(target, amount);
 			}
 		},

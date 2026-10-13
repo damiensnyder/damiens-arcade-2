@@ -1,9 +1,9 @@
 <script lang="ts">
 	// A fighter's name that shows their card on hover.
 	import { getContext } from 'svelte';
-	import { ABILITIES } from '../catalog.js';
 	import type { MMState } from '../state.svelte.js';
 	import { TEAMS } from '../teams.js';
+	import AbilityText from './AbilityText.svelte';
 	import FighterSprite from './FighterSprite.svelte';
 	import Hover from './Hover.svelte';
 	import StatRows from './StatRows.svelte';
@@ -34,7 +34,7 @@
 				<span style="margin-top: -0.5rem"><FighterSprite look={f.look} team={found.team} size={88} /></span>
 				<StatRows stats={f.stats} size={14} />
 			</div>
-			{#if ABILITIES[f.ability]?.description}<p class="small">{ABILITIES[f.ability].description}</p>{/if}
+			<AbilityText ability={f.ability} small />
 			{#if f.isOwner}
 				<p class="muted small">this season only · can't be re-signed. didn't sign any fighters. uh oh!</p>
 			{:else if mm.seasonLine(f.id)}

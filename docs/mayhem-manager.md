@@ -4,12 +4,16 @@ Mayhem Manager is a multiplayer sports-management game. Up to 16 teams (people a
 
 ## A season
 
-1. **Offseason.** Fighters age a year, and contracts and equipment wear down by a year. Teams decide whom to re-sign (3 more seasons, at an asking price based on worth) and which worn-out equipment to repair (2 more seasons; a repair costs 25% of the item's price, plus another 25% for each time it's been repaired before). Anyone not re-signed becomes a free agent. Teams keep half their money and get $100. New people can join with an unused team. Each team starts with $100.
-2. **Free agency (3 days).** Rookies plus last season's unsigned veterans. Each fighter's price drops each day (100% → 70% → 50%). People sign whenever they like, first come first served; bots sign at the end of each day. Free-agent contracts last 2 seasons. There's no limit on roster size. Anyone unsigned after day 3 leaves the league.
-3. **Training camp.** Each team gets a private shop of 6 items. Each fighter either trains one stat (+1) or attunes to one piece of the team's equipment. Purchases and plans can be undone until ready. Fighters without a plan get the bots' suggestion. Then random age-based development happens. A team with no fighters gets the Concerned Owner (all zeros, this season only).
+1. **Offseason.** Fighters age a year, and contracts and equipment wear down by a year. Teams decide whom to re-sign (3 more seasons, at 30% over the fighter's price) and which worn-out equipment to repair (2 more seasons; a repair costs 25% of the item's price, plus another 25% for each time it's been repaired before). Teams keep half their money and get $100. New people can join with an unused team. Each team starts with $100.
+2. **Free agency (3 days).** Each season brings one rookie per team, aged 18 to 24 (most often around 21). The rookies, the fighters nobody re-signed and anyone left unsigned last season are ranked by worth, which counts age, so promising rookies rank well and declining veterans fall away. The best are offered, as many as teams can afford: their last-day prices add up to about all the money teams have, and there are at least 2 per team. The rest leave the league. Fighters left unsigned after day 3 stay around (aging and developing) and are ranked again next season. People sign whenever they like, first come first served; bots sign at the end of each day. Free-agent contracts last 2 seasons. There's no limit on roster size.
+3. **Training camp.** Each team gets a private shop of 6 items. Each fighter either trains one stat (+1) or attunes to one piece of the team's equipment that can be attuned. Purchases and plans can be undone until ready. Fighters without a plan get the bots' suggestion. Then random age-based development happens, including for fighters without a team. A team with no fighters gets the Concerned Owner (all zeros, this season only).
 4. **Regular season.** Round-robin, `min(4, teams − 1)` weeks. Each week, every team hands out equipment and readies. A fight is simulated as soon as both teams are ready. The winner is the team with more fighters standing, then more HP left. Standings sort by wins, then (fighters standing for − against), then fighters standing for.
 5. **Playoffs.** 2, 4, 6 or 8 teams make it: the smallest of those that lets in at least half the league. Seeded bracket (1v4, 2v3 / 1v8, 4v5, 2v7, 3v6); with 6, seeds 1 and 2 get first-round byes.
 6. **Season over.** Once everyone readies, the next offseason starts.
+
+A new league starts with 8 earlier rookie classes as well as this season's. Each class has gone through the training camps and development it would have had, so the first free agency has a spread of ages.
+
+**Fighter prices.** A fighter's price is $25, plus $1 per half-star (stat point), plus their ability's price from the catalog, kept between $25 and $65. That's the price on the last day of free agency. Day 1 is 30% more, and day 2 is 15% more. Re-signing costs 30% more, for 3 seasons instead of 2.
 
 Leagues always have an even number of teams; a bot is added when needed. The host can force-ready, which has bots make picks for anyone who isn't ready. If no people are left in a league, nothing advances except through force-ready, so all-bot leagues don't run forever.
 
@@ -44,7 +48,9 @@ Leagues can run for dozens of seasons, so the data that grows is kept out of tho
 
 ## Equipment and abilities
 
-`docs/mm-catalog-plain.txt` is the source of truth for equipment and fighter abilities: names, slots, prices, descriptions and flavor text. After editing it, run `npm run check:mm-catalog`. It lists everything in the code that no longer matches the txt, plus anything missing battle behavior or images. Equipment is matched by name and abilities by description, so renaming an item or rewording an ability shows up as one removed and one added.
+`docs/mm-catalog-plain.txt` is the source of truth for equipment and fighter abilities: names, slots, prices, descriptions and flavor text. `##` headings in it are just for grouping. After editing it, run `npm run check:mm-catalog`. It lists everything in the code that no longer matches the txt, plus anything missing battle behavior or images. Equipment and abilities are matched by name, so renaming one shows up as one removed and one added.
+
+Only equipment whose description has an `[attuned: …]` part can be attuned to. Fighters who refuse unattuned equipment can't use the rest. Charging equipment has a 1s cooldown unless its description says otherwise. Equipment without art yet borrows another item's images (`PLACEHOLDER_ART` in `catalog.ts`).
 
 Status effects: frozen (slower, cooldowns at half speed), burning (5 damage a second), taunted (can only attack the taunter), scared (runs from the nearest enemy and doesn't attack), and hyped (+2 stars to strength, speed and energy). All but hyped are negative.
 
@@ -55,3 +61,5 @@ Stats run from 0 to 10. Descriptions count stars, and one star is 2 stat points.
 ## Balance
 
 `npx tsx scripts/mm-simulate.ts [teams] [seasons]` plays an all-bot league and prints standings, money and roster sizes.
+
+`npx tsx scripts/mm-values.ts` estimates what each stat (per star), ability, piece of equipment and extra fighter is worth in a fight, in dollars scaled so the equipment catalog as a whole is fairly priced. It takes snapshots of teams from all-bot leagues and makes each one fight an exact copy of itself with one thing changed. Equipment goes to whichever fighter it helps most. A run with 600 snapshots takes about 15 minutes on 8 cores.

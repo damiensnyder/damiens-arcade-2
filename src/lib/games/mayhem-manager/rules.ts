@@ -1,7 +1,7 @@
 // League rules and pure helpers shared by client and server.
 
-import { EQUIPMENT } from './catalog.js';
-import type { Equipment, Fighter, Match, Phase, Slot, StandingRow, TeamId } from './types.js';
+import { ABILITIES, EQUIPMENT } from './catalog.js';
+import { STAT_NAMES, type Equipment, type Fighter, type Match, type Phase, type Slot, type StandingRow, type TeamId } from './types.js';
 
 export const MAX_TEAMS = 16;
 export const STARTING_MONEY = 100;
@@ -14,6 +14,32 @@ export const RESIGN_CONTRACT_YEARS = 3;
 export const NEW_EQUIPMENT_YEARS = 2;
 export const REPAIR_YEARS = 2;
 export const MAX_STAT = 10;
+/** How much more than a fighter's price they ask for on each day of free agency. */
+export const FA_DAY_MARKUPS = [1.3, 1.15, 1];
+/** How much more than their price fighters ask to re-sign (for a longer contract). */
+export const RESIGN_MARKUP = 1.3;
+const MIN_FIGHTER_PRICE = 25;
+const MAX_FIGHTER_PRICE = 65;
+
+/**
+ * What a fighter costs on the last day of free agency: $25, plus $1 per half-star (stat point),
+ * plus whatever their ability is worth, kept between $25 and $65.
+ */
+export function fighterPrice(f: Fighter): number {
+	const statPoints = STAT_NAMES.reduce((sum, stat) => sum + f.stats[stat], 0);
+	const price = Math.round(MIN_FIGHTER_PRICE + statPoints + (ABILITIES[f.ability]?.price ?? 0));
+	return Math.min(Math.max(price, MIN_FIGHTER_PRICE), MAX_FIGHTER_PRICE);
+}
+
+/** Asking prices on each day of free agency. */
+export function freeAgentPrices(f: Fighter): number[] {
+	const price = fighterPrice(f);
+	return FA_DAY_MARKUPS.map((markup) => Math.round(price * markup));
+}
+
+export function resignPrice(f: Fighter): number {
+	return Math.round(fighterPrice(f) * RESIGN_MARKUP);
+}
 
 const SLOT_CAPACITY: Record<Slot, number> = { head: 1, hand: 2, torso: 1, legs: 1, feet: 1 };
 
@@ -119,7 +145,7 @@ export function phaseLabel(phase: Phase, teamCount: number, playoffRounds: numbe
 		case 'freeAgency':
 			return `free agency, day ${phase.day} of ${FA_DAYS}`;
 		case 'training':
-			return 'training';
+			return 'training camp';
 		case 'regularSeason':
 			return `regular season, week ${phase.week + 1} of ${regularSeasonWeeks(teamCount)}`;
 		case 'playoffs':

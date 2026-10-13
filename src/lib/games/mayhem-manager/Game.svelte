@@ -24,7 +24,7 @@
 	const PHASE_TAB_LABELS: Record<string, string> = {
 		offseason: 'offseason',
 		freeAgency: 'free agency',
-		training: 'training',
+		training: 'training camp',
 		regularSeason: 'regular season',
 		playoffs: 'playoffs',
 		seasonOver: 'playoffs'

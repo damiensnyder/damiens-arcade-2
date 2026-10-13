@@ -1,5 +1,5 @@
 // Checks that the code's equipment and abilities match docs/mm-catalog-plain.txt, the source of
-// truth. Equipment is matched by name and abilities by description, since the text has no keys.
+// truth. Equipment and abilities are matched by name, since the text has no keys.
 // Also checks that everything has battle behavior and images.
 //
 //   npx tsx scripts/mm-catalog-check.ts
@@ -21,7 +21,8 @@ function section(heading: string): string[][] {
 	return match
 		.slice(heading.length)
 		.split(/\n\s*\n/)
-		.map((block) => block.split('\n').map((l) => l.trim()).filter(Boolean))
+		// "## Melee weapons" and the like are just for grouping
+		.map((block) => block.split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('##')))
 		.filter((lines) => lines.length > 0);
 }
 
@@ -66,21 +67,30 @@ for (const e of codeEquipment.values()) {
 const codeAbilities = new Map(
 	Object.values(ABILITIES)
 		.filter((a) => a.key !== 'noAbilities')
-		.map((a) => [a.description, a])
+		.map((a) => [a.name, a])
 );
 const seenAbilities = new Set<string>();
-for (const [description, flavor = '', ...extra] of section('Abilities')) {
-	seenAbilities.add(description);
-	const a = codeAbilities.get(description);
-	if (!a) {
-		problems.push(`ability "${description}" is in the txt but not the code (or its wording differs)`);
+for (const [nameAndPrice, description, flavor = '', ...extra] of section('Abilities')) {
+	const m = nameAndPrice.match(/^(.*), (-?)\$(\d+)$/);
+	if (!m) {
+		problems.push(`ability: can't read name and price from "${nameAndPrice}"`);
 		continue;
 	}
-	if (extra.length > 0) problems.push(`ability "${description}": unexpected extra lines: ${extra.join(' / ')}`);
-	if (flavor !== a.flavor) problems.push(`ability ${a.key}: flavor text differs\n    txt:  ${flavor}\n    code: ${a.flavor}`);
+	const [, name, sign, amount] = m;
+	seenAbilities.add(name);
+	const a = codeAbilities.get(name);
+	if (!a) {
+		problems.push(`ability "${name}" is in the txt but not the code`);
+		continue;
+	}
+	if (extra.length > 0) problems.push(`ability ${name}: unexpected extra lines: ${extra.join(' / ')}`);
+	const price = Number(amount) * (sign ? -1 : 1);
+	if (price !== a.price) problems.push(`ability ${name}: price is $${price} in the txt, $${a.price} in the code`);
+	if (description !== a.description) problems.push(`ability ${name}: description differs\n    txt:  ${description}\n    code: ${a.description}`);
+	if (flavor !== a.flavor) problems.push(`ability ${name}: flavor text differs\n    txt:  ${flavor}\n    code: ${a.flavor}`);
 }
 for (const a of codeAbilities.values()) {
-	if (!seenAbilities.has(a.description)) problems.push(`ability ${a.key} ("${a.description}") is in the code but not the txt`);
+	if (!seenAbilities.has(a.name)) problems.push(`ability "${a.name}" (${a.key}) is in the code but not the txt`);
 	if (!ABILITY_BEHAVIORS[a.key]) problems.push(`ability ${a.key}: no battle behavior in sim/behaviors.ts`);
 }
 
