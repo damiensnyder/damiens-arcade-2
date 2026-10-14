@@ -57,6 +57,8 @@ interface AttackOption {
  * more they back off and the better they do; below zero they get stranded, so it's a little above.
  */
 const MELEE_COMMIT_LEAD = 0.1;
+/** How strongly retreating fighters are pulled toward the middle of the arena, against being pushed away from enemies. */
+const RETREAT_CENTERING = 0.7;
 
 export class BattleFighter {
 	readonly fight: Fight;
@@ -210,16 +212,20 @@ export class BattleFighter {
 		return Math.max(option.cooldown - this.cooldownReduction(), TICK_LENGTH) + option.charges * this.timeToCharge();
 	}
 
-	/** Damage per second against one target, before the target's toughness. */
-	private rawDps(option: AttackOption): number {
+	/**
+	 * Damage per second against one target (by default the nearest), before the target's toughness.
+	 * Attacks whose damage depends on the situation are judged by what they'd deal to that target.
+	 */
+	private rawDps(option: AttackOption, target = this.nearestEnemy()): number {
+		const damage = (target && option.spec.damageAt?.(option.item, target)) ?? option.damage;
 		const perUse =
 			option.spec.kind === 'melee'
 				? option.spec.fixed
-					? option.damage
-					: option.damage * this.meleeDamageMultiplier(option.spec.scalesWith)
+					? damage
+					: damage * this.meleeDamageMultiplier(option.spec.scalesWith)
 				: option.spec.kind === 'ranged'
-					? option.damage * this.rangedHitChance()
-					: option.damage;
+					? damage * this.rangedHitChance()
+					: damage;
 		return perUse / this.cycleTime(option);
 	}
 
@@ -311,8 +317,7 @@ export class BattleFighter {
 		const startY = this.y;
 
 		if (this.effects.some((e) => e.name === 'scared')) {
-			const nearest = this.nearestEnemy();
-			if (nearest) this.moveAwayFrom(nearest);
+			this.retreat();
 			return;
 		}
 		// taunted fighters can only go after whoever taunted them (area attacks still hit everyone)
@@ -324,18 +329,19 @@ export class BattleFighter {
 		let bestDps = 0;
 
 		for (const option of this.attackOptions()) {
-			const dps = this.rawDps(option);
 			if (option.spec.kind === 'aoe') {
 				const timeToFirst = this.timeUntilReady(option.charges);
-				const priority = allEnemies.reduce((sum, e) => sum + this.valueOfAttacking(e, dps, timeToFirst), 0);
+				const dpsAgainst = (e: BattleFighter) => this.rawDps(option, e);
+				const priority = allEnemies.reduce((sum, e) => sum + this.valueOfAttacking(e, dpsAgainst(e), timeToFirst), 0);
 				if (priority > bestPriority) {
 					bestPriority = priority;
-					bestDps = dps * allEnemies.length;
+					bestDps = allEnemies.reduce((sum, e) => sum + dpsAgainst(e), 0);
 					bestAction = () => this.aoeAttack(option);
 				}
 				continue;
 			}
 			for (const target of enemies) {
+				const dps = this.rawDps(option, target);
 				const timeToFirst =
 					option.spec.kind === 'melee'
 						? Math.max(this.timeUntilReady(option.charges), this.timeToReach(target))
@@ -380,7 +386,7 @@ export class BattleFighter {
 		if (this.distanceTo(target) > MELEE_RANGE && lead < MELEE_COMMIT_LEAD) {
 			this.moveTowards(target);
 		} else if (lead > MELEE_COMMIT_LEAD) {
-			this.moveAwayFrom(target);
+			this.retreat();
 		}
 
 		if (this.distanceTo(target) <= MELEE_RANGE && this.cooldown === 0 && this.charges >= option.charges) {
@@ -439,7 +445,7 @@ export class BattleFighter {
 			if (!e.prefersMelee() || e.timeToReach(this) >= this.cooldown) continue;
 			if (threat === null || this.distanceTo(e) < this.distanceTo(threat)) threat = e;
 		}
-		if (threat) this.moveAwayFrom(threat);
+		if (threat) this.retreat();
 	}
 
 	charge(): void {
@@ -588,8 +594,25 @@ export class BattleFighter {
 		this.moveByVector(dx, dy);
 	}
 
-	private moveAwayFrom(target: BattleFighter): void {
-		const [dx, dy] = scaleVector(this.x - target.x, this.y - target.y, this.metersPerSecond() * TICK_LENGTH);
+	/**
+	 * Backs away from all enemies at once (closer ones count for more), drifting toward the middle
+	 * of the arena so nobody gets pinned against a wall.
+	 */
+	private retreat(): void {
+		let awayX = 0;
+		let awayY = 0;
+		for (const e of this.enemies()) {
+			const distance = Math.max(this.distanceTo(e), 1);
+			awayX += (this.x - e.x) / (distance * distance);
+			awayY += (this.y - e.y) / (distance * distance);
+		}
+		const [x, y] = scaleVector(awayX, awayY, 1);
+		const middle = ARENA_SIZE / 2;
+		const [dx, dy] = scaleVector(
+			x + (RETREAT_CENTERING * (middle - this.x)) / middle,
+			y + (RETREAT_CENTERING * (middle - this.y)) / middle,
+			this.metersPerSecond() * TICK_LENGTH
+		);
 		this.moveByVector(dx, dy, false);
 	}
 

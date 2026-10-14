@@ -172,6 +172,10 @@ const VARIANTS: Record<string, () => void> = {
 			if (lead === this) return o(target, dps, t);
 			return (target as BattleFighter) === (lead as unknown as { lastTarget?: BattleFighter }).lastTarget ? 1e9 : (o(target, dps, t) as number);
 		}),
+	// don't back off from ranged targets: they shoot just as well from afar
+	rangedApproach: () => meleeVariant((me, t) => (prefersMelee(t) ? null : me.distanceTo(t) > MELEE_RANGE ? 'toward' : 'stay')),
+	// a ready fighter doesn't chase a melee target that's still on cooldown
+	holdWhenCooling: () => meleeVariant((me, t) => (me.cooldown === 0 && t.cooldown > 0 && prefersMelee(t) && me.distanceTo(t) > MELEE_RANGE ? 'stay' : null)),
 	noKiting: () => patch('keepAwayFromMelee', function () {}),
 	// kite from any melee enemy within 2x melee range, not just ones that would reach before our next action
 	moreKiting: () =>
@@ -181,7 +185,7 @@ const VARIANTS: Record<string, () => void> = {
 				if (!(e as BF).prefersMelee() || this.distanceTo(e) > MELEE_RANGE * 3) continue;
 				if (threat === null || this.distanceTo(e) < this.distanceTo(threat)) threat = e;
 			}
-			if (threat) this.moveAwayFrom(threat);
+			if (threat) awayFrom(this, threat);
 		})
 };
 
@@ -191,7 +195,7 @@ function backoffVariant(threshold: number) {
 		const opt = option as { charges: number; cooldown: number; spec: { fixed?: boolean; scalesWith?: never; damageAt?: (i: unknown, t: unknown) => number }; item: unknown; damage: number; knockback: number };
 		const lead = this.timeUntilReady(opt.charges) - this.timeToReach(t);
 		if (this.distanceTo(t) > MELEE_RANGE && lead < threshold) this.moveTowards(t);
-		else if (lead > threshold && this.distanceTo(t) < MELEE_RANGE * 2) this.moveAwayFrom(t);
+		else if (lead > threshold && this.distanceTo(t) < MELEE_RANGE * 2) awayFrom(this, t);
 		if (this.distanceTo(t) <= MELEE_RANGE && this.cooldown === 0 && this.charges >= opt.charges) {
 			this.charges -= opt.charges;
 			this.setCooldown(opt.cooldown);
@@ -204,6 +208,36 @@ function backoffVariant(threshold: number) {
 		}
 	});
 }
+
+/** The current melee logic, with a hook to override the choice of moving toward, away or staying put. */
+function meleeVariant(decide: (me: BF, t: BattleFighter, lead: number) => 'toward' | 'away' | 'stay' | null) {
+	patch('meleeAttack', function (_o, target, option) {
+		const t = target as BattleFighter;
+		const opt = option as { charges: number; cooldown: number; spec: { fixed?: boolean; scalesWith?: never; damageAt?: (i: unknown, t: unknown) => number }; item: unknown; damage: number; knockback: number };
+		const lead = this.timeUntilReady(opt.charges) - this.timeToReach(t);
+		let move = decide(this, t, lead);
+		if (move === null) move = this.distanceTo(t) > MELEE_RANGE && lead < 0.1 ? 'toward' : lead > 0.1 ? 'away' : 'stay';
+		if (move === 'toward' && this.distanceTo(t) > MELEE_RANGE) this.moveTowards(t);
+		else if (move === 'away') awayFrom(this, t);
+		if (this.distanceTo(t) <= MELEE_RANGE && this.cooldown === 0 && this.charges >= opt.charges) {
+			this.charges -= opt.charges;
+			this.setCooldown(opt.cooldown);
+			this.swing(-11.0001, -11);
+			const base = opt.spec.damageAt?.(opt.item, t) ?? opt.damage;
+			const damage = opt.spec.fixed ? base : base * this.meleeDamageMultiplier(opt.spec.scalesWith);
+			this.hit(t, opt.item, damage, opt.knockback, !opt.spec.fixed);
+		} else if (this.charges < opt.charges && this.cooldown === 0) {
+			this.charge();
+		}
+	});
+}
+/** The old retreat: straight away from one fighter. */
+function awayFrom(me: BF, from: BattleFighter) {
+	const d = Math.max(me.distanceTo(from), 1e-5);
+	const step = me.metersPerSecond() * TICK_LENGTH;
+	me.moveByVector(((me.x - from.x) / d) * step, ((me.y - from.y) / d) * step, false);
+}
+const prefersMelee = (f: BattleFighter) => (f as unknown as { prefersMelee: () => boolean }).prefersMelee();
 
 // remember targets for 'sticky'
 const hitOrig = original.hit;
@@ -226,11 +260,34 @@ const moveBy = (BattleFighter.prototype as unknown as { moveByVector: (dx: numbe
 };
 // share of living fighter-ticks spent not moving at all, by side, once the fight has started
 const idle = [0, 0];
+const hasActed = new WeakSet<object>();
+const readyStats: Record<string, { ready: number; idle: number; far: number; ticks: number }> = {};
+(BattleFighter.prototype as unknown as Record<string, unknown>).bestKind = function (this: BattleFighter) {
+	const me = this as unknown as { attackOptions: () => { spec: { kind: string }; item: unknown }[]; rawDps: (o: unknown) => number };
+	let best: { spec: { kind: string } } | null = null;
+	for (const o of me.attackOptions()) if (best === null || me.rawDps(o) > me.rawDps(best)) best = o;
+	return best?.spec.kind ?? 'none';
+};
 const alive = [0, 0];
 const actOrig = (BattleFighter.prototype as unknown as Record<string, (...a: unknown[]) => unknown>).act;
 (BattleFighter.prototype as unknown as Record<string, unknown>).act = function (this: BattleFighter) {
-	const [x, y, hp] = [this.x, this.y, this.hp];
+	const [x, y, hp, cooldownBefore] = [this.x, this.y, this.hp, this.cooldown];
 	const r = actOrig.call(this);
+	if (hp > 0 && this.enemies().length > 0 && this.team === 1) {
+		const kind = (this as unknown as { bestKind: () => string }).bestKind();
+		const row = (readyStats[kind] ??= { ready: 0, idle: 0, far: 0, ticks: 0 });
+		row.ticks++;
+		if (this.cooldown > cooldownBefore || cooldownBefore === 0 && this.cooldown > 0) hasActed.add(this);
+		// the approach at the start of a fight isn't a mistake
+		if (cooldownBefore === 0 && hasActed.has(this)) {
+			row.ready++;
+			if (this.cooldown === 0) {
+				row.idle++;
+				const nearest = this.nearestEnemy();
+				if (nearest && this.distanceTo(nearest) > MELEE_RANGE) row.far++;
+			}
+		}
+	}
 	if (hp > 0 && this.enemies().length > 0) {
 		alive[this.team]++;
 		if (Math.hypot(this.x - x, this.y - y) < 0.01) idle[this.team]++;
@@ -298,6 +355,7 @@ for (const name of chosen.length ? chosen : Object.keys(VARIANTS)) {
 	unpatchAll();
 	const [base, param] = name.split(':');
 	if (base === 'backoff') backoffVariant(Number(param));
+	else if (base === 'ignore') patch('attackOptions', function (o) { return (o() as { item: { key: string } }[]).filter((opt) => opt.item.key !== param); });
 	else if (base === 'noAction') {
 		const b = EQUIPMENT_BEHAVIORS[param];
 		const orig = b.action!.priority;
@@ -315,6 +373,7 @@ for (const name of chosen.length ? chosen : Object.keys(VARIANTS)) {
 	let wins = 0;
 	walked[0] = walked[1] = fighterSeconds = 0;
 	idle[0] = idle[1] = alive[0] = alive[1] = 0;
+	for (const k of Object.keys(readyStats)) delete readyStats[k];
 	let n = 0;
 	let seconds = 0;
 	const lengths: number[] = [];
@@ -337,6 +396,10 @@ for (const name of chosen.length ? chosen : Object.keys(VARIANTS)) {
 	console.log(
 		`${name.padEnd(20)} ${(100 * p).toFixed(1)}% ±${(100 * se).toFixed(1)}   avg ${(seconds / n).toFixed(1)}s (median ${q(0.5)}, p90 ${q(0.9)}, p99 ${q(0.99)}; ${(100 * inRange).toFixed(0)}% in 15-40s)  walks ${(walked[0] / fighterSeconds).toFixed(1)} vs ${(walked[1] / fighterSeconds).toFixed(1)} m/s, idle ${(100 * idle[0] / alive[0]).toFixed(0)}% vs ${(100 * idle[1] / alive[1]).toFixed(0)}% of ticks`
 	);
+}
+console.log('ready-but-did-nothing ticks (unchanged side), by main attack:');
+for (const [kind, r] of Object.entries(readyStats)) {
+	console.log(`  ${kind.padEnd(8)} ready ${(100 * r.ready / r.ticks).toFixed(0)}% of ticks; of those did nothing ${(100 * r.idle / Math.max(r.ready, 1)).toFixed(0)}% (${(100 * r.far / Math.max(r.idle, 1)).toFixed(0)}% of them out of melee range)`);
 }
 // team 1 always plays the unchanged policy
 console.log('action items used (by the unchanged side), share of fights where the holder used it at least once:');
