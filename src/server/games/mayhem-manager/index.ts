@@ -13,6 +13,7 @@ import {
 	STARTING_MONEY,
 	canWearTogether,
 	computeStandings,
+	isMaxed,
 	playoffRoundCount,
 	repairPrice,
 	playoffSize,
@@ -20,7 +21,6 @@ import {
 	sanitizeLineup
 } from '../../../lib/games/mayhem-manager/rules.js';
 import {
-	STAT_NAMES,
 	type Bracket,
 	type Decision,
 	type Fighter,
@@ -40,6 +40,8 @@ import {
 } from '../../../lib/games/mayhem-manager/types.js';
 import { packHistory, packStatLines, packTotals } from '../../../lib/games/mayhem-manager/wire.js';
 import { chooseLineup, chooseShopping, chooseSignings, chooseTraining, decideOffseason } from './bot.js';
+import { developFighter } from './development.js';
+import { publicFighter } from './public.js';
 import { concernedOwner, generateFighter, generateShop } from './generate.js';
 import { Rng } from './rng.js';
 import { simulateFight, type Combatant } from './sim/fight.js';
@@ -359,7 +361,7 @@ export default class MayhemManager extends GameLogicHandler {
 		// the first season's pool has to stock every team from scratch
 		const count = this.s.teams.length * 4 + 4;
 		for (let i = 0; i < count; i++) {
-			this.s.freeAgents.push(this.newFreeAgent(generateFighter(this.rng, this.nextId(), 20, 30), null));
+			this.s.freeAgents.push(this.newFreeAgent(generateFighter(this.rng, this.nextId(), this.rng.int(19, 28)), null));
 		}
 		this.startFreeAgency();
 	}
@@ -377,8 +379,11 @@ export default class MayhemManager extends GameLogicHandler {
 		for (const team of this.s.teams) {
 			team.fighters = team.fighters.filter((f) => !f.isOwner);
 			for (const f of team.fighters) {
+				f.prevStats = { ...f.stats };
 				f.age++;
 				f.contractYears--;
+				// everyone develops before re-sign asks and free agency, so what you see is what you get
+				developFighter(this.rng, f);
 			}
 			team.expiring = team.fighters
 				.filter((f) => f.contractYears <= 0)
@@ -404,10 +409,10 @@ export default class MayhemManager extends GameLogicHandler {
 			team.lineup = sanitizeLineup(team.fighters, team.equipment, team.lineup);
 		}
 		// this year's rookies, so people can see who's coming
-		const rookies = Math.ceil(this.s.teams.length * 1.5) + 2;
+		const rookies = this.s.teams.length + 1;
 		this.s.freeAgents = [];
 		for (let i = 0; i < rookies; i++) {
-			this.s.freeAgents.push(this.newFreeAgent(generateFighter(this.rng, this.nextId(), 20, 24), null));
+			this.s.freeAgents.push(this.newFreeAgent(generateFighter(this.rng, this.nextId()), null));
 		}
 		this.resetReady();
 		this.botsTakeTurns();
@@ -542,7 +547,7 @@ export default class MayhemManager extends GameLogicHandler {
 		if (this.s.phase.kind !== 'training' || team.ready) return false;
 		const fighter = team.fighters.find((f) => f.id === fighterId);
 		if (!fighter) return false;
-		if (plan?.kind === 'stat' && fighter.stats[plan.stat] >= MAX_STAT) return false;
+		if (plan?.kind === 'stat' && isMaxed(fighter.stats[plan.stat])) return false;
 		if (plan?.kind === 'attune') {
 			const owned = [...team.equipment.map((e) => e.key), ...team.shop.filter((s) => s.bought).map((s) => s.key)];
 			if (!owned.includes(plan.key) || fighter.attunements.includes(plan.key)) return false;
@@ -559,11 +564,9 @@ export default class MayhemManager extends GameLogicHandler {
 			// fighters without a plan get the bots' suggestion
 			chooseTraining(team);
 			for (const f of team.fighters) {
-				f.prevStats = { ...f.stats };
 				const plan = team.training[f.id];
 				if (plan?.kind === 'stat') f.stats[plan.stat] = Math.min(f.stats[plan.stat] + 1, MAX_STAT);
 				else if (plan?.kind === 'attune' && !f.attunements.includes(plan.key)) f.attunements.push(plan.key);
-				this.develop(f);
 			}
 			if (team.fighters.length === 0) team.fighters.push(concernedOwner(this.nextId()));
 			team.shop = [];
@@ -571,17 +574,6 @@ export default class MayhemManager extends GameLogicHandler {
 			team.lineup = sanitizeLineup(team.fighters, team.equipment, team.lineup);
 		}
 		this.startRegularSeason();
-	}
-
-	/** Random development that favors the young. */
-	private develop(f: Fighter): void {
-		for (const stat of STAT_NAMES) {
-			if (this.rng.real() >= 0.5) continue;
-			let change = (2 / 3) * (this.rng.real() + this.rng.real() + this.rng.real() - 1.5);
-			if (f.age <= 23 || f.age >= 33) change *= 2;
-			change += (25 - f.age) / 12;
-			f.stats[stat] = Math.min(Math.max(f.stats[stat] + Math.round(change), 0), MAX_STAT);
-		}
 	}
 
 	// ---- the regular season and playoffs ----
@@ -950,13 +942,13 @@ export default class MayhemManager extends GameLogicHandler {
 				isMine: t === mine,
 				money: t.money,
 				ready: t.ready,
-				fighters: t.fighters,
+				fighters: t.fighters.map(publicFighter),
 				equipment: t.equipment,
 				titles: t.titles,
-				expiring: t.expiring,
+				expiring: t.expiring.map((c) => ({ ...c, fighter: publicFighter(c.fighter) })),
 				repairs: t.repairs
 			})),
-			freeAgents: this.s.freeAgents,
+			freeAgents: this.s.freeAgents.map((a) => ({ ...a, fighter: publicFighter(a.fighter) })),
 			matches: this.s.matches,
 			bracket: this.s.bracket,
 			stats: packStatLines(this.s.statLines),

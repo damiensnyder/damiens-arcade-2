@@ -4,9 +4,9 @@ Mayhem Manager is a multiplayer sports-management game. Up to 16 teams (people a
 
 ## A season
 
-1. **Offseason.** Fighters age a year, and contracts and equipment wear down by a year. Teams decide whom to re-sign (3 more seasons, at an asking price based on worth) and which worn-out equipment to repair (2 more seasons; a repair costs 25% of the item's price, plus another 25% for each time it's been repaired before). Anyone not re-signed becomes a free agent. Teams keep half their money and get $100. New people can join with an unused team. Each team starts with $200.
-2. **Free agency (3 days).** Rookies plus last season's unsigned veterans. Each fighter's price drops each day (100% → 70% → 50%). People sign whenever they like, first come first served; bots sign at the end of each day. Free-agent contracts last 2 seasons. There's no limit on roster size. Anyone unsigned after day 3 leaves the league.
-3. **Training camp.** Each team gets a private shop of 6 items. Each fighter either trains one stat (+1) or attunes to one piece of the team's equipment. Purchases and plans can be undone until ready. Fighters without a plan get the bots' suggestion. Then random age-based development happens. A team with no fighters gets the Concerned Owner (all zeros, this season only).
+1. **Offseason.** Fighters age a year and develop: stats drift up for the young and down for the old, with some randomness. Contracts and equipment wear down by a year. Teams decide whom to re-sign (3 more seasons, at an asking price based on worth) and which worn-out equipment to repair (2 more seasons; a repair costs 25% of the item's price, plus another 25% for each time it's been repaired before). Anyone not re-signed becomes a free agent. Teams keep half their money and get $100. New people can join with an unused team. Each team starts with $200.
+2. **Free agency (3 days).** Rookies (one per team, plus one) plus last season's unsigned veterans. Everyone has already developed, so the stats you see are what they'll play with, plus training. Each fighter's price drops each day (100% → 70% → 50%). People sign whenever they like, first come first served; bots sign at the end of each day. Free-agent contracts last 2 seasons. There's no limit on roster size. Anyone unsigned after day 3 leaves the league.
+3. **Training camp.** Each team gets a private shop of 6 items. Each fighter either trains one stat (+1; development has already happened in the offseason) or attunes to one piece of the team's equipment. Purchases and plans can be undone until ready. Fighters without a plan get the bots' suggestion. A team with no fighters gets the Concerned Owner (all zeros, this season only).
 4. **Regular season.** Round-robin, `min(4, teams − 1)` weeks. Each week, every team hands out equipment and readies. A fight is simulated as soon as both teams are ready. The winner is the team with more fighters standing, then more HP left. Standings sort by wins, then (fighters standing for − against), then fighters standing for.
 5. **Playoffs.** 2, 4, 6 or 8 teams make it: the smallest of those that lets in at least half the league. Seeded bracket (1v4, 2v3 / 1v8, 4v5, 2v7, 3v6); with 6, seeds 1 and 2 get first-round byes.
 6. **Season over.** Once everyone readies, the next offseason starts.
@@ -46,7 +46,9 @@ Leagues can run for dozens of seasons, so the data that grows is kept out of tho
 
 Add the display entry in `catalog.ts`, its behavior in `sim/behaviors.ts`, and images named after the key in kebab case under `static/mm/equipment/` (worn) and `static/mm/icons/` (shown in cards). If the effect is an attack or stat change, declare it as `attack` or `statMods` and the valuation handles it. For anything else, add `value` hints (extra DPS, or multipliers on DPS or effective HP).
 
-Stats run from 0 to 10. Descriptions count stars, and one star is 2 stat points.
+Stats run from 0 to 10. Descriptions count stars, and one star is 2 stat points. The server tracks stats in fractions; clients only get them rounded to whole points (half-stars), so a 4-star fighter might be a 4.2.
+
+Aging lives in `development.ts`: each year every stat changes by a shared random amount plus its own, centered on `averageIncrease(age)`, which rises until the mid-20s, declines in the 30s and faster after 32. Rookies are 19 with stats of random()³ × 7.
 
 ## Balance
 

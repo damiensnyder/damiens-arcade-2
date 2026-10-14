@@ -23,7 +23,7 @@ export interface Fighter {
 	name: string;
 	age: number;
 	stats: Stats;
-	/** Stats before this season's training camp, to show what changed. */
+	/** Stats at the end of last season, to show what changed since. */
 	prevStats?: Stats;
 	look: Look;
 	/** Key into ABILITIES. */

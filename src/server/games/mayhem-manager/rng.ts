@@ -29,6 +29,13 @@ export class Rng {
 		return this.next() / 4294967296;
 	}
 
+	/** Random real from a normal distribution (Box–Muller). */
+	normal(mean = 0, sd = 1): number {
+		const u = 1 - this.real();
+		const v = this.real();
+		return mean + sd * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+	}
+
 	/** Random integer between min and max, inclusive. */
 	int(min: number, max: number): number {
 		return min + Math.floor((max + 1 - min) * this.real());

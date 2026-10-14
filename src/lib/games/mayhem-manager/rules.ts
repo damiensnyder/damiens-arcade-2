@@ -15,6 +15,11 @@ export const NEW_EQUIPMENT_YEARS = 2;
 export const REPAIR_YEARS = 2;
 export const MAX_STAT = 10;
 
+/** Stats are tracked in fractions but shown in whole points (half-stars), so nearly-10 counts as maxed. */
+export function isMaxed(stat: number): boolean {
+	return stat >= MAX_STAT - 0.5;
+}
+
 const SLOT_CAPACITY: Record<Slot, number> = { head: 1, hand: 2, torso: 1, legs: 1, feet: 1 };
 
 /** Whether one fighter can wear all of these equipment keys at once. */

@@ -2,13 +2,22 @@ import { ABILITY_KEYS, EQUIPMENT, EQUIPMENT_KEYS } from '../../../lib/games/mayh
 import { HAIR_COLORS, SKIN_TONES } from '../../../lib/games/mayhem-manager/appearance.js';
 import type { Fighter, Look, ShopItem, Stats } from '../../../lib/games/mayhem-manager/types.js';
 import names from './data/names.json';
+import { developFighter, trainRandomly } from './development.js';
 import type { Rng } from './rng.js';
 
-// Weighted toward low stats; most rookies are good at one or two things.
-const INITIAL_STAT_DISTRIBUTION = [0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5, 5, 6, 7, 8];
+/** Rookies start at this age, with most stats low and a few high. */
+export const ROOKIE_AGE = 19;
+/** A rookie's stats are random()³ × this, so most are low and a few are high. */
+const ROOKIE_STAT_SCALE = 7;
+/** Chance a fighter spent a year's training camp on a stat, for fighters who skip ahead in age. */
+const PAST_TRAINING_CHANCE = 0.5;
 const SHOP_SIZE = 6;
 
-export function generateFighter(rng: Rng, id: number, minAge: number, maxAge: number): Fighter {
+/**
+ * A new fighter, as they look after a development update at their age. Rookies are 19; older ones
+ * (for the league's first free agents) have played out the years in between.
+ */
+export function generateFighter(rng: Rng, id: number, age = ROOKIE_AGE): Fighter {
 	const gender = rng.pick(['M', 'F', 'A'] as const);
 	const firstNames =
 		gender === 'M' || (gender === 'A' && rng.real() < 0.5) ? names.firstNamesM : names.firstNamesF;
@@ -20,29 +29,24 @@ export function generateFighter(rng: Rng, id: number, minAge: number, maxAge: nu
 		skin: rng.int(0, SKIN_TONES.length - 1),
 		hairColor: rng.int(0, HAIR_COLORS.length - 1)
 	};
-	const stats: Stats = {
-		strength: rng.pick(INITIAL_STAT_DISTRIBUTION),
-		accuracy: rng.pick(INITIAL_STAT_DISTRIBUTION),
-		energy: rng.pick(INITIAL_STAT_DISTRIBUTION),
-		speed: rng.pick(INITIAL_STAT_DISTRIBUTION),
-		toughness: rng.pick(INITIAL_STAT_DISTRIBUTION)
-	};
-	// Older rookies have had time to develop a bit.
-	const extraYears = rng.int(minAge, maxAge) - minAge;
-	for (let i = 0; i < extraYears; i++) {
-		const stat = rng.pick(Object.keys(stats) as (keyof Stats)[]);
-		stats[stat] = Math.min(stats[stat] + 1, 10);
-	}
-	return {
+	const stat = () => rng.real() ** 3 * ROOKIE_STAT_SCALE;
+	const fighter: Fighter = {
 		id,
 		name: rng.pick(firstNames) + ' ' + rng.pick(names.lastNames),
-		age: minAge + extraYears,
-		stats,
+		age: ROOKIE_AGE,
+		stats: { strength: stat(), accuracy: stat(), energy: stat(), speed: stat(), toughness: stat() },
 		look,
 		ability: rng.real() < 0.4 ? 'noAbilities' : rng.pick(ABILITY_KEYS.filter((k) => k !== 'noAbilities')),
 		attunements: [],
 		contractYears: 0
 	};
+	developFighter(rng, fighter);
+	while (fighter.age < age) {
+		if (rng.real() < PAST_TRAINING_CHANCE) trainRandomly(rng, fighter);
+		fighter.age++;
+		developFighter(rng, fighter);
+	}
+	return fighter;
 }
 
 /** The stand-in for a team that didn't sign anyone. */

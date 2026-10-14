@@ -1,7 +1,7 @@
 // Decisions for teams run by bots (and for people who get force-readied).
 // Everything is judged in "value dollars": powerToDollars() of each fighter's best loadout.
 
-import { MAX_STAT, canWearTogether } from '../../../lib/games/mayhem-manager/rules.js';
+import { canWearTogether, isMaxed } from '../../../lib/games/mayhem-manager/rules.js';
 import { EQUIPMENT } from '../../../lib/games/mayhem-manager/catalog.js';
 import { STAT_NAMES, type Equipment, type Fighter, type FreeAgent, type TrainingPlan } from '../../../lib/games/mayhem-manager/types.js';
 import type { TeamState } from './state.js';
@@ -147,7 +147,7 @@ export function chooseTrainingPlan(f: Fighter, keys: string[]): TrainingPlan {
 	let best: TrainingPlan = { kind: 'stat', stat: 'toughness' };
 	let bestGain = -Infinity;
 	for (const stat of STAT_NAMES) {
-		if (f.stats[stat] >= MAX_STAT) continue;
+		if (isMaxed(f.stats[stat])) continue;
 		const gain = fighterValue({ ...f, stats: { ...f.stats, [stat]: f.stats[stat] + 1 } }, keys) - base;
 		if (gain > bestGain) {
 			best = { kind: 'stat', stat };

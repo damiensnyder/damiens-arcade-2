@@ -1,6 +1,7 @@
 import type { FightEvent, Fighter, FighterVisual, TeamId } from '../../../../lib/games/mayhem-manager/types.js';
 import type { Rng } from '../rng.js';
 import { ARENA_SIZE, CROWDING_DISTANCE, MAX_FIGHT_SECONDS, TICK_LENGTH } from './constants.js';
+import { roundStats } from '../public.js';
 import { BattleFighter, round2, scaleVector } from './fighter.js';
 
 export interface Combatant {
@@ -141,6 +142,8 @@ export class Fight {
 		const tick = this.ticks[Math.max(this.ticks.length - 1 - ticksAgo, 0)];
 		// fighters keep mutating, so store a snapshot rather than references to live objects
 		const copy = JSON.parse(JSON.stringify(event)) as FightEvent;
+		if (copy.type === 'spawn') copy.fighter.stats = roundStats(copy.fighter.stats);
+		else if (copy.type === 'animation' && copy.updates.stats) copy.updates.stats = roundStats(copy.updates.stats);
 		if (copy.type === 'animation') {
 			const existing = tick.find((e) => e.type === 'animation' && e.fighter === copy.fighter);
 			if (existing && existing.type === 'animation') {
