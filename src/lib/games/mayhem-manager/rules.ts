@@ -14,6 +14,8 @@ export const RESIGN_CONTRACT_YEARS = 3;
 export const NEW_EQUIPMENT_YEARS = 2;
 export const REPAIR_YEARS = 2;
 export const MAX_STAT = 10;
+/** Items in each team's training-camp shop. */
+export const SHOP_SIZE = 6;
 /** How much more than a fighter's price they ask for on each day of free agency. */
 export const FA_DAY_MARKUPS = [1.2, 1.1, 1];
 /** How much more than their price fighters ask to re-sign (for a longer contract). */

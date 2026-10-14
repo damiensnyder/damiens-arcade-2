@@ -6,12 +6,24 @@
 // cooldowns or stats needs no new tuning; unusual items need one hint, not one coefficient
 // per pairing with every other item.
 
-import type { Fighter, Stats } from '../../../lib/games/mayhem-manager/types.js';
+import { MAX_STAT, averageIncrease } from '../../../lib/games/mayhem-manager/rules.js';
+import { STAT_NAMES, type Fighter, type Stats } from '../../../lib/games/mayhem-manager/types.js';
 import { ABILITY_BEHAVIORS, EQUIPMENT_BEHAVIORS, FISTS, attackStats, type Behavior } from './sim/behaviors.js';
 import { TICK_LENGTH } from './sim/constants.js';
 
 /** How many enemies an area attack is assumed to hit. */
 const AOE_TARGETS = 2;
+// Fit to simulated fights between random teams: melee fighters lose time walking and being kited,
+// ranged ones get free shots. (Without these, ranged weapons were badly undervalued.)
+const MELEE_EFF = 0.65;
+const RANGED_EFF = 1.3;
+/**
+ * A fighter's body is worth a lot by itself: in simulated fights, each extra fighter, however
+ * weak, adds about as much as a typical fighter's skill does. So the zero point of fighter value
+ * sits near a fighter with no skill at all (√power ≈ 6), not far below it. (Valuing bodies more
+ * than this made bots hire extra fighters instead of buying gear, and they won less.)
+ */
+const BODY_OFFSET = 6;
 
 interface Part {
 	key: string;
@@ -66,8 +78,8 @@ export function fighterPower(fighter: Fighter, equipment: string[]): PowerEstima
 		const cycle = Math.max(cooldown - cooldownReduction, TICK_LENGTH) + charges * timeToCharge;
 		const perUse =
 			spec.kind === 'melee'
-				? damage * (spec.fixed ? 1 : meleeMult(spec.scalesWith))
-				: spec.kind === 'ranged' ? damage * hitChance : damage * AOE_TARGETS;
+				? damage * (spec.fixed ? 1 : meleeMult(spec.scalesWith)) * MELEE_EFF
+				: spec.kind === 'ranged' ? damage * hitChance * RANGED_EFF : damage * AOE_TARGETS;
 		if (perUse / cycle > dps) {
 			dps = perUse / cycle;
 			attacksPerSecond = 1 / cycle;
@@ -94,7 +106,7 @@ export function fighterPower(fighter: Fighter, equipment: string[]): PowerEstima
 
 /** Converts power to dollars. Square root because a team's strength adds up roughly like √power. */
 export function powerToDollars(power: number): number {
-	return 4.2 * (Math.sqrt(Math.max(power, 0)) - 15);
+	return 4.2 * (Math.sqrt(Math.max(power, 0)) - BODY_OFFSET);
 }
 
 /** Loadouts used to judge a fighter's potential, so accuracy and energy count for something. */
@@ -133,4 +145,26 @@ export function ageFactor(age: number): number {
 
 export function contractWorth(fighter: Fighter): number {
 	return fighterWorth(fighter) * ageFactor(fighter.age);
+}
+
+/** Expected points of training per season: about half of fighters' camps go to a stat. */
+const TRAINING_PER_SEASON = 0.5;
+
+/**
+ * The fighter as expected over their next `years` seasons: stats averaged over the contract, with
+ * each later season one more year of development and some training in their best stat.
+ */
+export function projectedFighter(fighter: Fighter, years: number): Fighter {
+	const stats = { ...fighter.stats };
+	const average: Stats = { strength: 0, accuracy: 0, energy: 0, speed: 0, toughness: 0 };
+	for (let year = 0; year < years; year++) {
+		if (year > 0) {
+			const change = averageIncrease(fighter.age + year);
+			for (const stat of STAT_NAMES) stats[stat] = Math.min(Math.max(stats[stat] + change, 0), MAX_STAT);
+		}
+		const best = STAT_NAMES.reduce((a, b) => (stats[b] > stats[a] ? b : a));
+		stats[best] = Math.min(stats[best] + TRAINING_PER_SEASON, MAX_STAT);
+		for (const stat of STAT_NAMES) average[stat] += stats[stat] / years;
+	}
+	return { ...fighter, stats: average };
 }

@@ -1,11 +1,11 @@
 import { ABILITY_KEYS, EQUIPMENT, EQUIPMENT_KEYS } from '../../../lib/games/mayhem-manager/catalog.js';
 import { HAIR_COLORS, SKIN_TONES } from '../../../lib/games/mayhem-manager/appearance.js';
+import { SHOP_SIZE } from '../../../lib/games/mayhem-manager/rules.js';
 import type { Fighter, Look, ShopItem } from '../../../lib/games/mayhem-manager/types.js';
 import names from './data/names.json';
 import { developFighter, trainRandomly } from './development.js';
 import type { Rng } from './rng.js';
 
-const SHOP_SIZE = 6;
 /** Rookies start at this age. */
 export const ROOKIE_AGE = 19;
 /** A rookie's stats are random()³ × this, so most are low and a few are high. */

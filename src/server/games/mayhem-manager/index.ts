@@ -278,7 +278,7 @@ export default class MayhemManager extends GameLogicHandler {
 		const phase = this.s.phase;
 		switch (phase.kind) {
 			case 'offseason':
-				decideOffseason(team);
+				decideOffseason(team, this.s.freeAgents);
 				break;
 			case 'freeAgency':
 				for (const agent of chooseSignings(team, this.s.freeAgents, phase.day, FA_DAYS)) {

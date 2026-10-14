@@ -228,7 +228,7 @@ function runLeague(teamCount: number, seasons: number, from: number, d: Data): v
 								inc(d.primaryKinds, p.kind);
 								bestPrimary = Math.max(bestPrimary, f.stats[p.stat]);
 							}
-							inc(d.bestPrimary, bestPrimary);
+							inc(d.bestPrimary, Math.round(bestPrimary));
 							d.star35[1]++;
 							d.star475[1]++;
 							if (bestPrimary >= 7) d.star35[0]++;
