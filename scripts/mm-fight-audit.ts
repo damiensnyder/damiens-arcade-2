@@ -224,6 +224,20 @@ const moveBy = (BattleFighter.prototype as unknown as { moveByVector: (dx: numbe
 	walked[this.team] += Math.hypot(dx, dy);
 	return moveBy.call(this, dx, dy, turn);
 };
+// share of living fighter-ticks spent not moving at all, by side, once the fight has started
+const idle = [0, 0];
+const alive = [0, 0];
+const actOrig = (BattleFighter.prototype as unknown as Record<string, (...a: unknown[]) => unknown>).act;
+(BattleFighter.prototype as unknown as Record<string, unknown>).act = function (this: BattleFighter) {
+	const [x, y, hp] = [this.x, this.y, this.hp];
+	const r = actOrig.call(this);
+	if (hp > 0 && this.enemies().length > 0) {
+		alive[this.team]++;
+		if (Math.hypot(this.x - x, this.y - y) < 0.01) idle[this.team]++;
+	}
+	return r;
+};
+original.act = (BattleFighter.prototype as unknown as Record<string, (...a: unknown[]) => unknown>).act;
 // unpatchAll() restores from `original`, so the counting wrapper has to be what it restores
 original.moveByVector = (BattleFighter.prototype as unknown as Record<string, (...a: unknown[]) => unknown>).moveByVector;
 const fproto = Fight.prototype as unknown as { doTick: () => void };
@@ -300,6 +314,7 @@ for (const name of chosen.length ? chosen : Object.keys(VARIANTS)) {
 	const rng = new Rng([1, 2, 3, 4]);
 	let wins = 0;
 	walked[0] = walked[1] = fighterSeconds = 0;
+	idle[0] = idle[1] = alive[0] = alive[1] = 0;
 	let n = 0;
 	let seconds = 0;
 	const lengths: number[] = [];
@@ -320,7 +335,7 @@ for (const name of chosen.length ? chosen : Object.keys(VARIANTS)) {
 	const q = (x: number) => lengths[Math.floor(x * (lengths.length - 1))].toFixed(0);
 	const inRange = lengths.filter((l) => l >= 15 && l < 40).length / lengths.length;
 	console.log(
-		`${name.padEnd(20)} ${(100 * p).toFixed(1)}% ±${(100 * se).toFixed(1)}   avg ${(seconds / n).toFixed(1)}s (median ${q(0.5)}, p90 ${q(0.9)}, p99 ${q(0.99)}; ${(100 * inRange).toFixed(0)}% in 15-40s)  walks ${(walked[0] / fighterSeconds).toFixed(1)} vs ${(walked[1] / fighterSeconds).toFixed(1)} m/s`
+		`${name.padEnd(20)} ${(100 * p).toFixed(1)}% ±${(100 * se).toFixed(1)}   avg ${(seconds / n).toFixed(1)}s (median ${q(0.5)}, p90 ${q(0.9)}, p99 ${q(0.99)}; ${(100 * inRange).toFixed(0)}% in 15-40s)  walks ${(walked[0] / fighterSeconds).toFixed(1)} vs ${(walked[1] / fighterSeconds).toFixed(1)} m/s, idle ${(100 * idle[0] / alive[0]).toFixed(0)}% vs ${(100 * idle[1] / alive[1]).toFixed(0)}% of ticks`
 	);
 }
 // team 1 always plays the unchanged policy

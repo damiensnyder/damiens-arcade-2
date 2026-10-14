@@ -51,6 +51,13 @@ interface AttackOption {
 	knockback: number;
 }
 
+/**
+ * Melee fighters back off while they'd still get back into range with more than this many seconds
+ * to spare before their weapon is ready, and close in once they wouldn't. The lower the margin the
+ * more they back off and the better they do; below zero they get stranded, so it's a little above.
+ */
+const MELEE_COMMIT_LEAD = 0.1;
+
 export class BattleFighter {
 	readonly fight: Fight;
 	index = -1;
@@ -368,11 +375,11 @@ export class BattleFighter {
 	}
 
 	private meleeAttack(target: BattleFighter, option: AttackOption): void {
+		// back off for as long as there's still time to get back before the weapon is ready
 		const lead = this.timeUntilReady(option.charges) - this.timeToReach(target);
-		if (this.distanceTo(target) > MELEE_RANGE && lead < 0.7) {
+		if (this.distanceTo(target) > MELEE_RANGE && lead < MELEE_COMMIT_LEAD) {
 			this.moveTowards(target);
-		} else if (lead > 0.7 && this.distanceTo(target) < MELEE_RANGE * 2) {
-			// no point standing next to someone you can't hit yet
+		} else if (lead > MELEE_COMMIT_LEAD) {
 			this.moveAwayFrom(target);
 		}
 
