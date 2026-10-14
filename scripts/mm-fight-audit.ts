@@ -216,6 +216,16 @@ original.hit = proto.hit as never;
 // ---- running ----
 
 let ticks = 0;
+// meters walked per fighter per second, by side (team 0 plays the variant)
+const walked = [0, 0];
+let fighterSeconds = 0;
+const moveBy = (BattleFighter.prototype as unknown as { moveByVector: (dx: number, dy: number, turn?: boolean) => void }).moveByVector;
+(BattleFighter.prototype as unknown as Record<string, unknown>).moveByVector = function (this: BattleFighter, dx: number, dy: number, turn?: boolean) {
+	walked[this.team] += Math.hypot(dx, dy);
+	return moveBy.call(this, dx, dy, turn);
+};
+// unpatchAll() restores from `original`, so the counting wrapper has to be what it restores
+original.moveByVector = (BattleFighter.prototype as unknown as Record<string, (...a: unknown[]) => unknown>).moveByVector;
 const fproto = Fight.prototype as unknown as { doTick: () => void };
 const doTick = fproto.doTick;
 fproto.doTick = function (this: unknown) {
@@ -230,6 +240,7 @@ function fight(snap: Member[], rng: Rng): { won: boolean; seconds: number } {
 	const b = side(1, 1_000_000);
 	ticks = 0;
 	const out = simulateFight(rng, rng.real() < 0.5 ? [...a, ...b] : [...b, ...a], false, new Map([[0, 15], [1, 15]]));
+	fighterSeconds += (ticks * TICK_LENGTH * snap.length);
 	return { won: out.winner === 0, seconds: ticks * TICK_LENGTH };
 }
 
@@ -288,6 +299,7 @@ for (const name of chosen.length ? chosen : Object.keys(VARIANTS)) {
 	} else VARIANTS[name]();
 	const rng = new Rng([1, 2, 3, 4]);
 	let wins = 0;
+	walked[0] = walked[1] = fighterSeconds = 0;
 	let n = 0;
 	let seconds = 0;
 	const lengths: number[] = [];
@@ -308,7 +320,7 @@ for (const name of chosen.length ? chosen : Object.keys(VARIANTS)) {
 	const q = (x: number) => lengths[Math.floor(x * (lengths.length - 1))].toFixed(0);
 	const inRange = lengths.filter((l) => l >= 15 && l < 40).length / lengths.length;
 	console.log(
-		`${name.padEnd(20)} ${(100 * p).toFixed(1)}% ±${(100 * se).toFixed(1)}   avg ${(seconds / n).toFixed(1)}s (median ${q(0.5)}, p90 ${q(0.9)}, p99 ${q(0.99)}; ${(100 * inRange).toFixed(0)}% in 15-40s)`
+		`${name.padEnd(20)} ${(100 * p).toFixed(1)}% ±${(100 * se).toFixed(1)}   avg ${(seconds / n).toFixed(1)}s (median ${q(0.5)}, p90 ${q(0.9)}, p99 ${q(0.99)}; ${(100 * inRange).toFixed(0)}% in 15-40s)  walks ${(walked[0] / fighterSeconds).toFixed(1)} vs ${(walked[1] / fighterSeconds).toFixed(1)} m/s`
 	);
 }
 // team 1 always plays the unchanged policy
