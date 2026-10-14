@@ -1,6 +1,7 @@
 <script lang="ts">
 	// Before a fight: put equipment on fighters, scout the other team, then ready up.
 	import { getContext } from 'svelte';
+	import AbilityText from '../components/AbilityText.svelte';
 	import ActionBar from '../components/ActionBar.svelte';
 	import EquipmentCard from '../components/EquipmentCard.svelte';
 	import FighterSprite from '../components/FighterSprite.svelte';
@@ -8,7 +9,7 @@
 	import ResultButtons from '../components/ResultButtons.svelte';
 	import StatRows from '../components/StatRows.svelte';
 	import TeamLogo from '../components/TeamLogo.svelte';
-	import { ABILITIES, EQUIPMENT } from '../catalog.js';
+	import { EQUIPMENT } from '../catalog.js';
 	import { canWearTogether, roundName } from '../rules.js';
 	import type { MMState } from '../state.svelte.js';
 	import { TEAMS } from '../teams.js';
@@ -29,6 +30,9 @@
 		const others = (lineup[f.id] ?? []).filter((id) => id !== e.id).map(keyOf);
 		const fits = canWearTogether([...others, e.key]);
 		let note = '';
+		if (f.ability === 'refusesUnattuned' && !f.attunements.includes(e.key)) {
+			return { disabled: true, label: f.name + ' (not attuned)' };
+		}
 		if (!fits) {
 			const slots = EQUIPMENT[e.key]?.slots ?? [];
 			note = slots.includes('hand') ? ' (hands full)' : ` (${slots[0]} taken)`;
@@ -77,7 +81,7 @@
 				</div>
 				<div class="fbody">
 					<span class="big-sprite"><FighterSprite look={f.look} team={mine.id} equipment={wornBy(f)} size={100} /></span>
-					<div class="ability"><p>{ABILITIES[f.ability]?.description}</p></div>
+					<div class="ability"><AbilityText ability={f.ability} /></div>
 					<div class="stats-col"><StatRows stats={f.stats} /></div>
 				</div>
 			</article>

@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
+	import AbilityText from '../components/AbilityText.svelte';
 	import ActionBar from '../components/ActionBar.svelte';
 	import EquipmentCard from '../components/EquipmentCard.svelte';
 	import FighterSprite from '../components/FighterSprite.svelte';
 	import MatchupHeader from '../components/MatchupHeader.svelte';
 	import StatRows from '../components/StatRows.svelte';
-	import { ABILITIES } from '../catalog.js';
 	import type { MMState } from '../state.svelte.js';
 	import { TEAMS } from '../teams.js';
 
@@ -36,7 +36,7 @@
 				</div>
 				<div class="fbody">
 					<span class="big-sprite"><FighterSprite look={f.look} team={opponentId} size={100} /></span>
-					<div class="ability"><p>{ABILITIES[f.ability]?.description}</p></div>
+					<div class="ability"><AbilityText ability={f.ability} /></div>
 					<div class="stats-col"><StatRows stats={f.stats} /></div>
 				</div>
 			</article>

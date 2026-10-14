@@ -17,6 +17,8 @@
 	const bracket = $derived(vp.bracket);
 	const rounds = $derived(bracket?.rounds ?? []);
 	const seasonOver = $derived(vp.phase.kind === 'seasonOver');
+	// after your fight, stay here until you move on, even if the next round has started
+	const held = $derived(mm.heldMatch());
 
 	const matchOf = (p: PlayoffPairing): Match | undefined => vp.matches.find((m) => m.id === p.matchId);
 	const revealed = (p: PlayoffPairing) => {
@@ -83,6 +85,13 @@
 			{#if mm.myTeam}
 				<div class="row wrap desktop-only"><WaitingOn /><ReadyButton label="on to the offseason" /></div>
 			{/if}
+		</div>
+	{/if}
+
+	{#if held && vp.phase.kind === 'playoffs'}
+		<div class="card banner">
+			<p>Your {roundName(held.round!, rounds.length)} fight is over.</p>
+			<button type="button" class="go" onclick={() => (mm.playedMatchId = null)}>on to the {roundName(vp.phase.round, rounds.length)}</button>
 		</div>
 	{/if}
 

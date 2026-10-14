@@ -1,6 +1,6 @@
 import type { FightEvent, Fighter, FighterVisual, TeamId } from '../../../../lib/games/mayhem-manager/types.js';
 import type { Rng } from '../rng.js';
-import { ARENA_SIZE, CROWDING_DISTANCE, MAX_FIGHT_SECONDS, TICK_LENGTH } from './constants.js';
+import { ARENA_SIZE, CROWDING_DISTANCE, MAX_FIGHT_SECONDS, OVERTIME_INTERVAL, OVERTIME_START, OVERTIME_TOUGHNESS_LOSS, TICK_LENGTH } from './constants.js';
 import { roundStats } from '../public.js';
 import { BattleFighter, round2, scaleVector } from './fighter.js';
 
@@ -29,6 +29,8 @@ export interface FightOutcome {
 	winner: TeamId;
 	standing: Map<TeamId, number>;
 	fighters: FighterOutcome[];
+	/** How much each team's money changed during the fight (from looting and the like). */
+	moneyChange: Map<TeamId, number>;
 }
 
 export class Fight {
@@ -37,10 +39,15 @@ export class Fight {
 	readonly ticks: FightEvent[][] = [];
 	private readonly logging: boolean;
 	private tickCount = 0;
+	/** Ticks since the fight started (after everyone spawned in). */
+	private fightTicks = 0;
+	private readonly money: Map<TeamId, number>;
+	private readonly moneyChange = new Map<TeamId, number>();
 
-	constructor(rng: Rng, combatants: Combatant[], logging: boolean) {
+	constructor(rng: Rng, combatants: Combatant[], logging: boolean, money = new Map<TeamId, number>()) {
 		this.rng = rng;
 		this.logging = logging;
+		this.money = new Map(money);
 		// alternate teams so neither side always spawns (and acts) first
 		const byTeam = new Map<TeamId, Combatant[]>();
 		for (const c of combatants) byTeam.set(c.team, [...(byTeam.get(c.team) ?? []), c]);
@@ -119,8 +126,20 @@ export class Fight {
 
 	private doTick(): void {
 		this.newTick();
+		this.fightTicks++;
+		this.overtime();
 		for (const f of this.fighters) f.upkeep();
 		for (const f of this.rng.shuffle(this.fighters.slice())) f.act();
+	}
+
+	/** Past OVERTIME_START, everyone standing loses some toughness every OVERTIME_INTERVAL seconds. */
+	private overtime(): void {
+		const seconds = this.fightTicks * TICK_LENGTH;
+		const ticksPerInterval = Math.round(OVERTIME_INTERVAL / TICK_LENGTH);
+		if (seconds < OVERTIME_START - 1e-6 || this.fightTicks % ticksPerInterval !== 0) return;
+		for (const f of this.fighters) {
+			if (f.hp > 0) f.changeStats({ toughness: -OVERTIME_TOUGHNESS_LOSS });
+		}
 	}
 
 	private newTick(): void {
@@ -134,6 +153,38 @@ export class Fight {
 
 	private isOver(): boolean {
 		return this.teamsStanding().length <= 1 || this.tickCount * TICK_LENGTH >= MAX_FIGHT_SECONDS;
+	}
+
+	moneyOf(team: TeamId): number {
+		return this.money.get(team) ?? 0;
+	}
+
+	/** Moves up to `amount` dollars from one team (or from nowhere, if null) to another. Returns how much moved. */
+	transferMoney(from: TeamId | null, to: TeamId, amount: number): number {
+		const moved = from === null ? amount : Math.min(amount, this.moneyOf(from));
+		if (moved <= 0) return 0;
+		if (from !== null) {
+			this.money.set(from, this.moneyOf(from) - moved);
+			this.moneyChange.set(from, (this.moneyChange.get(from) ?? 0) - moved);
+		}
+		this.money.set(to, this.moneyOf(to) + moved);
+		this.moneyChange.set(to, (this.moneyChange.get(to) ?? 0) + moved);
+		return moved;
+	}
+
+	/** Runs knockout effects: the victim's own (like shrapnel), the attacker's, then teammates' (like a halo). */
+	knockedOut(victim: BattleFighter, by: BattleFighter): void {
+		for (const item of [...victim.items]) item.behavior.onKnockedOut?.(item, by);
+		if (by.team !== victim.team) {
+			for (const item of [...by.items]) item.behavior.onKo?.(item, victim);
+		}
+		for (const mate of this.fighters) {
+			if (mate === victim || mate.team !== victim.team || mate.hp <= 0) continue;
+			for (const item of [...mate.items]) {
+				if (victim.hp > 0) return;
+				item.behavior.onTeammateKnockedOut?.(item, victim);
+			}
+		}
 	}
 
 	/** Records an event in the current tick (or an earlier one), merging animation updates per fighter. */
@@ -183,6 +234,7 @@ export class Fight {
 			.sort((a, b) => standing.get(b)! - standing.get(a)! || hpLeft.get(b)! - hpLeft.get(a)!);
 		return {
 			ticks: this.ticks,
+			moneyChange: this.moneyChange,
 			winner: ranked[0],
 			standing,
 			fighters: this.fighters.map((f) => ({
@@ -200,8 +252,13 @@ export class Fight {
 	}
 }
 
-export function simulateFight(rng: Rng, combatants: Combatant[], logging = true): FightOutcome {
-	const fight = new Fight(rng, combatants, logging);
+export function simulateFight(
+	rng: Rng,
+	combatants: Combatant[],
+	logging = true,
+	money?: Map<TeamId, number>
+): FightOutcome {
+	const fight = new Fight(rng, combatants, logging, money);
 	fight.simulate();
 	return fight.outcome();
 }

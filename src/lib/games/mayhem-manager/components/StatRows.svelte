@@ -26,7 +26,7 @@
 			case 'accuracy':
 				return `Hits ${Math.min(25 + 5 * v, 100)}% of ranged attacks`;
 			case 'energy':
-				return `Takes ${Math.max(6 - 0.4 * v, 1).toFixed(1)}s to charge`;
+				return `Takes ${Math.max(4.8 - 0.32 * v, 0.8).toFixed(1)}s to charge`;
 			case 'speed':
 				return `Runs ${Math.max(5 + v, 1)} m/s`;
 			case 'toughness':

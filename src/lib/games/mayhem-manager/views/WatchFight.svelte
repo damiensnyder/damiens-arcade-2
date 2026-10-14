@@ -23,7 +23,7 @@
 	let frame = $state<Frame>({ fighters: [], particles: [] });
 	let tick = $state(-1);
 	let paused = $state(false);
-	let speed = $state(2);
+	let speed = $state(1);
 	let finished = $state(false);
 	let delta = 0;
 
@@ -145,6 +145,12 @@
 		const standing = w === match.a ? match.result.standingA : match.result.standingB;
 		return `The ${TEAMS[w].last} win with ${standing} fighter${standing === 1 ? '' : 's'} standing!`;
 	});
+
+	const dismissText = $derived.by(() => {
+		const mine = mm.vp?.myTeam;
+		if (!match?.result || mine == null || (match.a !== mine && match.b !== mine)) return 'got it';
+		return match.result.winner === mine ? 'yay' : 'dang';
+	});
 </script>
 
 <main class="panel watch">
@@ -188,7 +194,10 @@
 			{/each}
 			</div>
 			{#if finished && winnerText}
-				<div class="result-banner">{winnerText}</div>
+				<div class="result-banner">
+					<p>{winnerText}</p>
+					<button type="button" class="go" onclick={() => (mm.watching = null)}>{dismissText}</button>
+				</div>
 			{/if}
 		</div>
 
@@ -374,6 +383,10 @@
 		font-size: 1.2rem;
 		text-align: center;
 		max-width: 80%;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.6rem;
 	}
 
 	.controls {

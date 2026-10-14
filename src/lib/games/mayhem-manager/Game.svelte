@@ -24,7 +24,7 @@
 	const PHASE_TAB_LABELS: Record<string, string> = {
 		offseason: 'offseason',
 		freeAgency: 'free agency',
-		training: 'training',
+		training: 'training camp',
 		regularSeason: 'regular season',
 		playoffs: 'playoffs',
 		seasonOver: 'playoffs'
@@ -56,6 +56,8 @@
 				return 'training';
 			case 'regularSeason':
 			case 'playoffs': {
+				const held = mm.heldMatch();
+				if (held) return held.week !== null ? 'matchups' : 'playoffs';
 				const match = mm.myCurrentMatch();
 				if (mine && match && !match.result && !mine.ready) return mm.scouting ? 'scout' : 'prep';
 				return vp.phase.kind === 'regularSeason' ? 'matchups' : 'playoffs';

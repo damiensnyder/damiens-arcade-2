@@ -1,4 +1,5 @@
-import type { FightEvent, Fighter, Look, Stats, TeamId, Tint } from '../../../../lib/games/mayhem-manager/types.js';
+import { EQUIPMENT } from '../../../../lib/games/mayhem-manager/catalog.js';
+import type { FightEvent, Fighter, Look, Slot, Stats, TeamId, Tint } from '../../../../lib/games/mayhem-manager/types.js';
 import { ABILITY_BEHAVIORS, EQUIPMENT_BEHAVIORS, FISTS, attackStats, type AttackSpec, type Behavior } from './behaviors.js';
 import {
 	ARENA_SIZE,
@@ -23,14 +24,22 @@ export interface BattleItem {
 	state: Record<string, number>;
 }
 
-interface StatusEffect {
+export interface StatusEffect {
 	name: string;
 	remaining: number;
+	/** Whether it's bad for the fighter it's on (for immunities and the like). */
+	negative: boolean;
 	/** Applied when the effect starts and undone exactly when it ends. */
 	mods: Partial<Stats>;
 	/** Cooldowns tick at half speed. */
-	slow: boolean;
+	slow?: boolean;
+	/** Damage per second, before toughness. */
+	burn?: number;
+	/** Who caused it (for damage credit, or who a taunt points at). */
+	source?: BattleFighter;
 	tint: Tint;
+	/** Seconds since the last burn. */
+	timer?: number;
 }
 
 interface AttackOption {
@@ -39,7 +48,17 @@ interface AttackOption {
 	damage: number;
 	cooldown: number;
 	charges: number;
+	knockback: number;
 }
+
+/**
+ * Melee fighters back off while they'd still get back into range with more than this many seconds
+ * to spare before their weapon is ready, and close in once they wouldn't. The lower the margin the
+ * more they back off and the better they do; below zero they get stranded, so it's a little above.
+ */
+const MELEE_COMMIT_LEAD = 0.1;
+/** How strongly retreating fighters are pulled toward the middle of the arena, against being pushed away from enemies. */
+const RETREAT_CENTERING = 0.7;
 
 export class BattleFighter {
 	readonly fight: Fight;
@@ -57,6 +76,11 @@ export class BattleFighter {
 	stats: Stats;
 	items: BattleItem[];
 	effects: StatusEffect[] = [];
+	/**
+	 * What a point of damage is worth this tick, judged by the best attack: its priority over its
+	 * damage per second. Lets item actions that boost damage compare themselves with attacking.
+	 */
+	valuePerDamage = 0;
 	flash = 0;
 	pose: number = Pose.Stationary1;
 
@@ -86,14 +110,32 @@ export class BattleFighter {
 		if (ability && Object.keys(ability).length > 0) this.items.push(item(fighter.ability, 'ability', ability));
 		for (const key of equipmentKeys) {
 			const behavior = EQUIPMENT_BEHAVIORS[key];
+			if (fighter.ability === 'refusesUnattuned' && !fighter.attunements.includes(key)) continue;
 			if (behavior) this.items.push(item(key, 'equipment', behavior));
 		}
 	}
 
+	/** Gives the fighter an ability mid-fight (it starts the fight as if they'd always had it). */
+	addAbility(key: string, behavior: Behavior): void {
+		const added: BattleItem = { key, kind: 'ability', behavior, attuned: false, owner: this, state: {} };
+		this.items.push(added);
+		const mods = behavior.statMods?.(false);
+		if (mods) this.changeStats(mods);
+		behavior.onFightStart?.(added);
+	}
+
+	slotsOf(item: BattleItem): Slot[] {
+		return item.kind === 'equipment' ? (EQUIPMENT[item.key]?.slots ?? []) : [];
+	}
+
+	teamMoney(): number {
+		return this.fight.moneyOf(this.team);
+	}
+
 	// ---- derived numbers ----
 
-	meleeDamageMultiplier(): number {
-		return Math.max(0.5 + 0.1 * this.stats.strength, 0.25);
+	meleeDamageMultiplier(stat: keyof Stats = 'strength'): number {
+		return Math.max(0.5 + 0.1 * this.stats[stat], 0.25);
 	}
 
 	rangedHitChance(): number {
@@ -105,7 +147,7 @@ export class BattleFighter {
 	}
 
 	timeToCharge(): number {
-		return Math.max(6 - 0.4 * this.stats.energy, 1);
+		return Math.max(4.8 - 0.32 * this.stats.energy, 0.8);
 	}
 
 	damageTakenMultiplier(): number {
@@ -170,15 +212,34 @@ export class BattleFighter {
 		return Math.max(option.cooldown - this.cooldownReduction(), TICK_LENGTH) + option.charges * this.timeToCharge();
 	}
 
-	/** Damage per second against one target, before the target's toughness. */
-	private rawDps(option: AttackOption): number {
+	/**
+	 * Damage per second against one target (by default the nearest), before the target's toughness.
+	 * Attacks whose damage depends on the situation are judged by what they'd deal to that target.
+	 */
+	private rawDps(option: AttackOption, target = this.nearestEnemy()): number {
+		const damage = (target && option.spec.damageAt?.(option.item, target)) ?? option.damage;
 		const perUse =
 			option.spec.kind === 'melee'
-				? option.damage * this.meleeDamageMultiplier()
+				? option.spec.fixed
+					? damage
+					: damage * this.meleeDamageMultiplier(option.spec.scalesWith)
 				: option.spec.kind === 'ranged'
-					? option.damage * this.rangedHitChance()
-					: option.damage;
+					? damage * this.rangedHitChance()
+					: damage;
 		return perUse / this.cycleTime(option);
+	}
+
+	/** Seconds an item action takes: charging up to `chargesNeeded`, then its cooldown. */
+	actionTime(chargesNeeded: number, cooldown: number): number {
+		return this.timeToCharge() * Math.max(chargesNeeded - this.charges, 0) + Math.max(cooldown - this.cooldownReduction(), TICK_LENGTH);
+	}
+
+	/** Works something out as if this fighter's stats were changed by `mods`. */
+	withMods<T>(mods: Partial<Stats>, fn: () => T): T {
+		this.applyMods(mods, 1);
+		const result = fn();
+		this.applyMods(mods, -1);
+		return result;
 	}
 
 	/** Roughly how much damage per second this fighter threatens. */
@@ -229,6 +290,13 @@ export class BattleFighter {
 			}
 		}
 		this.effects = this.effects.filter((e) => e.remaining > EPSILON);
+		for (const effect of this.effects) {
+			if (!effect.burn || this.hp <= 0) continue;
+			effect.timer = (effect.timer ?? 0) + TICK_LENGTH;
+			if (effect.timer < 1 - EPSILON) continue;
+			effect.timer = 0;
+			(effect.source ?? this).dealDamage(this, Math.ceil(effect.burn * this.damageTakenMultiplier()));
+		}
 		const newTint = this.tint();
 		if (statsChanged || newTint.some((x, i) => x !== oldTint[i])) {
 			this.log({ type: 'animation', fighter: this.index, updates: { stats: this.stats, tint: newTint } });
@@ -243,26 +311,37 @@ export class BattleFighter {
 
 	act(): void {
 		if (this.hp <= 0) return;
-		const enemies = this.enemies();
-		if (enemies.length === 0) return;
+		const allEnemies = this.enemies();
+		if (allEnemies.length === 0) return;
 		const startX = this.x;
 		const startY = this.y;
 
+		if (this.effects.some((e) => e.name === 'scared')) {
+			this.retreat();
+			return;
+		}
+		// taunted fighters can only go after whoever taunted them (area attacks still hit everyone)
+		const taunter = this.effects.find((e) => e.name === 'taunted')?.source;
+		const enemies = taunter && taunter.hp > 0 ? [taunter] : allEnemies;
+
 		let bestPriority = -Infinity;
 		let bestAction: (() => void) | null = null;
+		let bestDps = 0;
 
 		for (const option of this.attackOptions()) {
-			const dps = this.rawDps(option);
 			if (option.spec.kind === 'aoe') {
 				const timeToFirst = this.timeUntilReady(option.charges);
-				const priority = enemies.reduce((sum, e) => sum + this.valueOfAttacking(e, dps, timeToFirst), 0);
+				const dpsAgainst = (e: BattleFighter) => this.rawDps(option, e);
+				const priority = allEnemies.reduce((sum, e) => sum + this.valueOfAttacking(e, dpsAgainst(e), timeToFirst), 0);
 				if (priority > bestPriority) {
 					bestPriority = priority;
+					bestDps = allEnemies.reduce((sum, e) => sum + dpsAgainst(e), 0);
 					bestAction = () => this.aoeAttack(option);
 				}
 				continue;
 			}
 			for (const target of enemies) {
+				const dps = this.rawDps(option, target);
 				const timeToFirst =
 					option.spec.kind === 'melee'
 						? Math.max(this.timeUntilReady(option.charges), this.timeToReach(target))
@@ -270,15 +349,18 @@ export class BattleFighter {
 				const priority = this.valueOfAttacking(target, dps, timeToFirst);
 				if (priority > bestPriority) {
 					bestPriority = priority;
+					bestDps = dps;
 					bestAction =
 						option.spec.kind === 'melee' ? () => this.meleeAttack(target, option) : () => this.rangedAttack(target, option);
 				}
 			}
 		}
 
+		this.valuePerDamage = bestDps > 0 ? Math.max(bestPriority, 0) / bestDps : 0;
+		// item actions are judged on the same scale as attacks, and only once the fighter can act
 		for (const item of this.items) {
 			const action = item.behavior.action;
-			if (!action) continue;
+			if (!action || this.cooldown > 0) continue;
 			const priority = action.priority(item);
 			if (priority > 0 && priority > bestPriority) {
 				bestPriority = priority;
@@ -299,19 +381,21 @@ export class BattleFighter {
 	}
 
 	private meleeAttack(target: BattleFighter, option: AttackOption): void {
+		// back off for as long as there's still time to get back before the weapon is ready
 		const lead = this.timeUntilReady(option.charges) - this.timeToReach(target);
-		if (this.distanceTo(target) > MELEE_RANGE && lead < 0.7) {
+		if (this.distanceTo(target) > MELEE_RANGE && lead < MELEE_COMMIT_LEAD) {
 			this.moveTowards(target);
-		} else if (lead > 0.7 && this.distanceTo(target) < MELEE_RANGE * 2) {
-			// no point standing next to someone you can't hit yet
-			this.moveAwayFrom(target);
+		} else if (lead > MELEE_COMMIT_LEAD) {
+			this.retreat();
 		}
 
 		if (this.distanceTo(target) <= MELEE_RANGE && this.cooldown === 0 && this.charges >= option.charges) {
 			this.charges -= option.charges;
 			this.setCooldown(option.cooldown);
 			this.swing(Pose.BackswingStart, Pose.Backswing);
-			this.hit(target, option.item, option.damage * this.meleeDamageMultiplier(), option.spec.knockback);
+			const base = option.spec.damageAt?.(option.item, target) ?? option.damage;
+			const damage = option.spec.fixed ? base : base * this.meleeDamageMultiplier(option.spec.scalesWith);
+			this.hit(target, option.item, damage, option.knockback, !option.spec.fixed);
 		} else if (this.charges < option.charges && this.cooldown === 0) {
 			this.charge();
 		}
@@ -328,7 +412,7 @@ export class BattleFighter {
 				this.log({ type: 'projectile', fighter: this.index, target: target.index, img: option.spec.projectile });
 			}
 			if (this.fight.rng.real() < this.rangedHitChance()) {
-				this.hit(target, option.item, option.damage, option.spec.knockback);
+				this.hit(target, option.item, option.spec.damageAt?.(option.item, target) ?? option.damage, option.knockback);
 			} else {
 				this.log({ type: 'text', fighter: target.index, text: 'missed', color: '#aaa' });
 			}
@@ -347,7 +431,7 @@ export class BattleFighter {
 				if (option.spec.projectile) {
 					this.log({ type: 'projectile', fighter: this.index, target: target.index, img: option.spec.projectile });
 				}
-				this.hit(target, option.item, option.damage, option.spec.knockback);
+				this.hit(target, option.item, option.spec.damageAt?.(option.item, target) ?? option.damage, option.knockback);
 			}
 		} else if (this.charges < option.charges && this.cooldown === 0) {
 			this.charge();
@@ -361,10 +445,10 @@ export class BattleFighter {
 			if (!e.prefersMelee() || e.timeToReach(this) >= this.cooldown) continue;
 			if (threat === null || this.distanceTo(e) < this.distanceTo(threat)) threat = e;
 		}
-		if (threat) this.moveAwayFrom(threat);
+		if (threat) this.retreat();
 	}
 
-	private charge(): void {
+	charge(): void {
 		this.charges += 1;
 		this.setCooldown(this.timeToCharge());
 		this.log({ type: 'particle', fighter: this.index, img: '/mm/charge.png' });
@@ -383,9 +467,13 @@ export class BattleFighter {
 
 	// ---- hits and damage ----
 
-	/** Resolves one landed attack: prevention, damage, knockback, then on-hit effects. */
-	private hit(target: BattleFighter, source: BattleItem, rawDamage: number, knockback: number): void {
-		const damage = Math.ceil(rawDamage * target.damageTakenMultiplier());
+	/**
+	 * Resolves one landed attack: prevention, damage, knockback, then on-hit effects.
+	 * `scaled` false means the target's toughness doesn't reduce the damage.
+	 */
+	private hit(target: BattleFighter, source: BattleItem, rawDamage: number, knockback: number, scaled = true): void {
+		for (const item of this.items) rawDamage *= item.behavior.damageMultiplier?.(item, target) ?? 1;
+		const damage = Math.ceil(rawDamage * (scaled ? target.damageTakenMultiplier() : 1));
 		for (const item of [...target.items]) {
 			if (item.behavior.preventHit?.(item, this, damage)) return;
 		}
@@ -416,8 +504,9 @@ export class BattleFighter {
 		target.log({ type: 'text', fighter: target.index, text: String(amount) });
 		if (isHit) target.log({ type: 'particle', fighter: target.index, img: '/mm/damage.png' });
 		if (target.hp <= 0) {
-			this.kos++;
+			if (target.team !== this.team) this.kos++;
 			target.kod++;
+			this.fight.knockedOut(target, this);
 		}
 	}
 
@@ -433,6 +522,8 @@ export class BattleFighter {
 	}
 
 	addEffect(effect: StatusEffect): void {
+		if (this.hp <= 0) return;
+		if (this.items.some((i) => i.behavior.blocksEffect?.(i, effect))) return;
 		const existing = this.effects.find((e) => e.name === effect.name);
 		if (existing) {
 			existing.remaining = Math.max(existing.remaining, effect.remaining);
@@ -503,8 +594,25 @@ export class BattleFighter {
 		this.moveByVector(dx, dy);
 	}
 
-	private moveAwayFrom(target: BattleFighter): void {
-		const [dx, dy] = scaleVector(this.x - target.x, this.y - target.y, this.metersPerSecond() * TICK_LENGTH);
+	/**
+	 * Backs away from all enemies at once (closer ones count for more), drifting toward the middle
+	 * of the arena so nobody gets pinned against a wall.
+	 */
+	private retreat(): void {
+		let awayX = 0;
+		let awayY = 0;
+		for (const e of this.enemies()) {
+			const distance = Math.max(this.distanceTo(e), 1);
+			awayX += (this.x - e.x) / (distance * distance);
+			awayY += (this.y - e.y) / (distance * distance);
+		}
+		const [x, y] = scaleVector(awayX, awayY, 1);
+		const middle = ARENA_SIZE / 2;
+		const [dx, dy] = scaleVector(
+			x + (RETREAT_CENTERING * (middle - this.x)) / middle,
+			y + (RETREAT_CENTERING * (middle - this.y)) / middle,
+			this.metersPerSecond() * TICK_LENGTH
+		);
 		this.moveByVector(dx, dy, false);
 	}
 

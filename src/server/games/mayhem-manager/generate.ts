@@ -1,22 +1,19 @@
 import { ABILITY_KEYS, EQUIPMENT, EQUIPMENT_KEYS } from '../../../lib/games/mayhem-manager/catalog.js';
 import { HAIR_COLORS, SKIN_TONES } from '../../../lib/games/mayhem-manager/appearance.js';
-import type { Fighter, Look, ShopItem, Stats } from '../../../lib/games/mayhem-manager/types.js';
+import type { Fighter, Look, ShopItem } from '../../../lib/games/mayhem-manager/types.js';
 import names from './data/names.json';
 import { developFighter, trainRandomly } from './development.js';
 import type { Rng } from './rng.js';
 
-/** Rookies start at this age, with most stats low and a few high. */
+const SHOP_SIZE = 6;
+/** Rookies start at this age. */
 export const ROOKIE_AGE = 19;
 /** A rookie's stats are random()³ × this, so most are low and a few are high. */
 const ROOKIE_STAT_SCALE = 7;
-/** Chance a fighter spent a year's training camp on a stat, for fighters who skip ahead in age. */
+/** Chance a stand-in training camp (see earlierClasses) trains a stat. */
 const PAST_TRAINING_CHANCE = 0.5;
-const SHOP_SIZE = 6;
 
-/**
- * A new fighter, as they look after a development update at their age. Rookies are 19; older ones
- * (for the league's first free agents) have played out the years in between.
- */
+/** A rookie (or a fighter of the given age with rookie-like stats), as they look after a development update. */
 export function generateFighter(rng: Rng, id: number, age = ROOKIE_AGE): Fighter {
 	const gender = rng.pick(['M', 'F', 'A'] as const);
 	const firstNames =
@@ -33,7 +30,7 @@ export function generateFighter(rng: Rng, id: number, age = ROOKIE_AGE): Fighter
 	const fighter: Fighter = {
 		id,
 		name: rng.pick(firstNames) + ' ' + rng.pick(names.lastNames),
-		age: ROOKIE_AGE,
+		age,
 		stats: { strength: stat(), accuracy: stat(), energy: stat(), speed: stat(), toughness: stat() },
 		look,
 		ability: rng.real() < 0.4 ? 'noAbilities' : rng.pick(ABILITY_KEYS.filter((k) => k !== 'noAbilities')),
@@ -41,12 +38,25 @@ export function generateFighter(rng: Rng, id: number, age = ROOKIE_AGE): Fighter
 		contractYears: 0
 	};
 	developFighter(rng, fighter);
-	while (fighter.age < age) {
-		if (rng.real() < PAST_TRAINING_CHANCE) trainRandomly(rng, fighter);
-		fighter.age++;
-		developFighter(rng, fighter);
-	}
 	return fighter;
+}
+
+/**
+ * Fighters for a new league besides this season's rookies: earlier rookie classes, each put
+ * through the training camps and development they'd have had, so there's a spread of ages.
+ */
+export function earlierClasses(rng: Rng, nextId: () => number, classSize: number, classes: number): Fighter[] {
+	const pool: Fighter[] = [];
+	for (let year = 0; year < classes; year++) {
+		for (let i = 0; i < classSize; i++) pool.push(generateFighter(rng, nextId()));
+		for (const f of pool) {
+			// a stand-in for training camp, then the next year's development
+			if (rng.real() < PAST_TRAINING_CHANCE) trainRandomly(rng, f);
+			f.age++;
+			developFighter(rng, f);
+		}
+	}
+	return pool;
 }
 
 /** The stand-in for a team that didn't sign anyone. */

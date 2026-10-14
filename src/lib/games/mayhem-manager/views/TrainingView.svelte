@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
+	import AbilityText from '../components/AbilityText.svelte';
 	import ActionBar from '../components/ActionBar.svelte';
 	import EquipmentCard from '../components/EquipmentCard.svelte';
 	import FighterSprite from '../components/FighterSprite.svelte';
@@ -8,7 +9,7 @@
 	import ReadyButton from '../components/ReadyButton.svelte';
 	import StatRows from '../components/StatRows.svelte';
 	import WaitingOn from '../components/WaitingOn.svelte';
-	import { ABILITIES, EQUIPMENT } from '../catalog.js';
+	import { EQUIPMENT } from '../catalog.js';
 	import { MAX_STAT, NEW_EQUIPMENT_YEARS } from '../rules.js';
 	import type { MMState } from '../state.svelte.js';
 	import { yearsLeft } from '../summaries.js';
@@ -17,15 +18,18 @@
 	const mm = getContext<MMState>('mm');
 	const mine = $derived(mm.myTeam!);
 	const priv = $derived(mm.vp!.private!);
-	const ownedKeys = $derived([
-		...new Set([...mine.equipment.map((e) => e.key), ...priv.shop.filter((s) => s.bought).map((s) => s.key)])
-	]);
+	/** Owned equipment that can be attuned to. */
+	const ownedKeys = $derived(
+		[...new Set([...mine.equipment.map((e) => e.key), ...priv.shop.filter((s) => s.bought).map((s) => s.key)])].filter(
+			(k) => EQUIPMENT[k]?.attunable
+		)
+	);
 	/** Which equipment each fighter's attune dropdown has selected. */
 	let attuneChoice = $state<Record<number, string>>({});
 
 	function planLabel(f: Fighter): string {
 		const plan = priv.training[f.id];
-		if (!plan) return 'no plan yet · a bot will pick';
+		if (!plan) return 'select a stat or attunement';
 		return plan.kind === 'stat' ? `training ${plan.stat}` : `attuning to ${EQUIPMENT[plan.key]?.name ?? plan.key}`;
 	}
 
@@ -95,7 +99,7 @@
 				<div class="row wrap trainee">
 					<span class="big-sprite"><FighterSprite look={f.look} team={mine.id} size={96} /></span>
 					<div class="ability">
-						<p>{ABILITIES[f.ability]?.description}</p>
+						<AbilityText ability={f.ability} />
 						{#if f.attunements.length > 0}
 							<p class="muted small">attuned: {f.attunements.map((k) => EQUIPMENT[k]?.name ?? k).join(', ')}</p>
 						{/if}
@@ -113,26 +117,30 @@
 								>
 							{/snippet}
 						</StatRows>
-						<div class="attune">
-							<select
-								aria-label="Equipment for {f.name} to attune to"
-								disabled={mine.ready || ownedKeys.every((k) => f.attunements.includes(k))}
-								value={selectedAttune(f)}
-								onchange={(e) => chooseAttune(f, e.currentTarget.value)}
-							>
-								{#if ownedKeys.length === 0}<option value="">no equipment to attune to</option>{/if}
-								{#each ownedKeys as key (key)}
-									<option value={key} disabled={f.attunements.includes(key)}>{EQUIPMENT[key]?.name}{f.attunements.includes(key) ? ' (attuned)' : ''}</option>
-								{/each}
-							</select>
-							<button
-								type="button"
-								class="mini"
-								class:on={plan?.kind === 'attune'}
-								disabled={mine.ready || !selectedAttune(f)}
-								onclick={() => attune(f)}>{plan?.kind === 'attune' ? 'attuning' : 'attune'}</button
-							>
-						</div>
+						{#if f.ability === 'cantAttune'}
+							<p class="muted small">can't attune to equipment</p>
+						{:else}
+							<div class="attune">
+								<select
+									aria-label="Equipment for {f.name} to attune to"
+									disabled={mine.ready || ownedKeys.every((k) => f.attunements.includes(k))}
+									value={selectedAttune(f)}
+									onchange={(e) => chooseAttune(f, e.currentTarget.value)}
+								>
+									{#if ownedKeys.length === 0}<option value="">no equipment to attune to</option>{/if}
+									{#each ownedKeys as key (key)}
+										<option value={key} disabled={f.attunements.includes(key)}>{EQUIPMENT[key]?.name}{f.attunements.includes(key) ? ' (attuned)' : ''}</option>
+									{/each}
+								</select>
+								<button
+									type="button"
+									class="mini"
+									class:on={plan?.kind === 'attune'}
+									disabled={mine.ready || !selectedAttune(f)}
+									onclick={() => attune(f)}>{plan?.kind === 'attune' ? 'attuning' : 'attune'}</button
+								>
+							</div>
+						{/if}
 					</div>
 				</div>
 			</article>

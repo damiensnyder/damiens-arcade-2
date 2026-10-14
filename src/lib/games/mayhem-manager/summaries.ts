@@ -2,7 +2,14 @@
 
 import { ordinal, roundName } from './rules.js';
 import { TEAMS } from './teams.js';
-import type { SeasonRecord, TeamId } from './types.js';
+import type { FreeAgent, SeasonRecord, TeamId } from './types.js';
+
+/** Where a free agent comes from: "rookie", "formerly of the Pandas" or "free agent". */
+export function freeAgentOrigin(agent: FreeAgent): string {
+	if (agent.rookie) return 'rookie';
+	if (agent.formerTeam !== null) return `formerly of the ${TEAMS[agent.formerTeam].last}`;
+	return 'free agent';
+}
 
 /** How far a team got in a season's playoffs, e.g. "lost semifinal to Pandas". */
 export function playoffResult(record: SeasonRecord, team: TeamId, short = true): string {

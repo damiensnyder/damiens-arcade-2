@@ -71,11 +71,18 @@ export interface ShopItem {
 
 export type TrainingPlan = { kind: 'stat'; stat: StatName } | { kind: 'attune'; key: string };
 
+/**
+ * A fighter without a team. Between free agencies these are the unsigned ones who might be
+ * offered again next season, plus (in the offseason) this season's rookies.
+ */
 export interface FreeAgent {
 	fighter: Fighter;
-	/** Asking price on each day of free agency. */
+	/** Asking price on each day of free agency. Empty outside free agency. */
 	prices: number[];
+	/** Most recent team, if they've ever had one. */
 	formerTeam: TeamId | null;
+	/** New to the league this season. */
+	rookie: boolean;
 	signedBy: TeamId | null;
 	signedPrice: number | null;
 }

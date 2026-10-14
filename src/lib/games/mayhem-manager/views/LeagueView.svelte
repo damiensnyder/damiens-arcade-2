@@ -1,14 +1,15 @@
 <script lang="ts">
 	import { getContext } from 'svelte';
+	import AbilityText from '../components/AbilityText.svelte';
 	import BotIcon from '../components/BotIcon.svelte';
 	import FighterName from '../components/FighterName.svelte';
 	import FighterSprite from '../components/FighterSprite.svelte';
 	import ResultButtons from '../components/ResultButtons.svelte';
 	import StatRows from '../components/StatRows.svelte';
 	import TeamLogo from '../components/TeamLogo.svelte';
-	import { ABILITIES } from '../catalog.js';
 	import { playoffSize } from '../rules.js';
 	import type { MMState } from '../state.svelte.js';
+	import { freeAgentOrigin } from '../summaries.js';
 	import { TEAMS, teamShortName } from '../teams.js';
 	import type { Fighter, Match, TeamId } from '../types.js';
 
@@ -63,7 +64,7 @@
 				});
 			}
 		}
-		for (const a of vp.freeAgents) list.push({ fighter: a.fighter, team: null, status: 'rookie', pending: false });
+		for (const a of vp.freeAgents) list.push({ fighter: a.fighter, team: null, status: freeAgentOrigin(a), pending: false });
 		return list;
 	});
 	const sortedTeams = $derived([...vp.teams].sort((a, b) => mm.titlesOf(b.id) - mm.titlesOf(a.id) || a.id - b.id));
@@ -89,7 +90,7 @@
 						<span class="acts"><button type="button" class="mini" onclick={() => mm.viewTeam(r.team)}>view</button></span>
 					</div>
 				{/each}
-				<span class="muted small">PF: your fighters still standing at the end of your fights. PA: opponents' fighters still standing. Ties are broken by the difference.</span>
+				<span class="muted small">PF: the number of prevailing fighters you have at the end of a fight. PA: opponents' prevailing fighters.</span>
 			</div>
 
 			<div class="card">
@@ -149,7 +150,10 @@
 
 		{#if vp.phase.kind === 'offseason'}
 			<section class="col fa-col">
-				<h3>Upcoming free agents</h3>
+				<div class="row between wrap">
+					<h3>Upcoming free agents</h3>
+					<span class="muted small">only the best are offered in free agency. the rest leave the league.</span>
+				</div>
 				<div class="fa-grid">
 					{#each upcoming as u (u.fighter.id)}
 						<article class="card fa">
@@ -161,7 +165,7 @@
 								<span style="margin-top: -0.3rem"><FighterSprite look={u.fighter.look} team={null} size={72} /></span>
 								<div style="flex: 1; min-width: 0"><StatRows stats={u.fighter.stats} size={14} /></div>
 							</div>
-							{#if ABILITIES[u.fighter.ability]?.description}<p class="small">{ABILITIES[u.fighter.ability].description}</p>{/if}
+							<AbilityText ability={u.fighter.ability} small />
 							<span class="row small" style="gap: 0.4rem">
 								{#if u.team !== null}<TeamLogo team={u.team} size="xs" />{/if}
 								<span class:muted={u.pending}>{u.status}</span>

@@ -45,6 +45,7 @@ export interface LeagueState {
 	season: number;
 	phase: Phase;
 	teams: TeamState[];
+	/** During free agency, the fighters on offer; otherwise, those who might be (see FreeAgent). */
 	freeAgents: FreeAgent[];
 	/** This season's matches. Earlier seasons survive as `seasons` records. */
 	matches: Match[];
@@ -176,6 +177,7 @@ export const leagueSchema = z.object({
 			fighter,
 			prices: z.array(z.number()),
 			formerTeam: teamId.nullable(),
+			rookie: z.boolean().default(false),
 			signedBy: teamId.nullable(),
 			signedPrice: z.number().nullable()
 		})
