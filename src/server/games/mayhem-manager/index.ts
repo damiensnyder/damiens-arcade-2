@@ -44,7 +44,7 @@ import {
 	type TrainingPlan
 } from '../../../lib/games/mayhem-manager/types.js';
 import { packHistory, packStatLines, packTotals } from '../../../lib/games/mayhem-manager/wire.js';
-import { chooseLineup, chooseShopping, chooseSignings, chooseTraining, decideOffseason } from './bot.js';
+import { BOT, type BotPolicy } from './bot.js';
 import { developFighter } from './development.js';
 import { publicFighter } from './public.js';
 import { concernedOwner, earlierClasses, generateFighter, generateShop } from './generate.js';
@@ -73,6 +73,8 @@ export default class MayhemManager extends GameLogicHandler {
 	private fightLogs = new Map<number, FightLog>();
 	/** Bumped whenever finished seasons change, so clients know to re-fetch the history. */
 	private historyVersion = 1;
+	/** Which bot makes each team's decisions. Scripts swap this to pit bot versions against each other. */
+	botFor: (team: TeamId) => BotPolicy = () => BOT;
 
 	constructor() {
 		super();
@@ -278,22 +280,22 @@ export default class MayhemManager extends GameLogicHandler {
 		const phase = this.s.phase;
 		switch (phase.kind) {
 			case 'offseason':
-				decideOffseason(team, this.s.freeAgents);
+				this.botFor(team.id).decideOffseason(team, this.s.freeAgents);
 				break;
 			case 'freeAgency':
-				for (const agent of chooseSignings(team, this.s.freeAgents, phase.day, FA_DAYS)) {
+				for (const agent of this.botFor(team.id).chooseSignings(team, this.s.freeAgents, phase.day, FA_DAYS)) {
 					this.sign(team, agent.fighter.id, true);
 				}
 				break;
 			case 'training':
-				if (team.controller === 'bot') chooseShopping(team);
-				chooseTraining(team);
+				if (team.controller === 'bot') this.botFor(team.id).chooseShopping(team);
+				this.botFor(team.id).chooseTraining(team);
 				break;
 			case 'regularSeason':
 			case 'playoffs': {
 				const current = sanitizeLineup(team.fighters, team.equipment, team.lineup);
 				const hasPicks = Object.values(current).some((ids) => ids.length > 0);
-				team.lineup = hasPicks && team.controller !== 'bot' ? current : chooseLineup(team.fighters, team.equipment);
+				team.lineup = hasPicks && team.controller !== 'bot' ? current : this.botFor(team.id).chooseLineup(team.fighters, team.equipment);
 				break;
 			}
 		}
@@ -541,7 +543,7 @@ export default class MayhemManager extends GameLogicHandler {
 		if (phase.kind !== 'freeAgency') return;
 		// bots shop at the end of the day, in a random order
 		for (const team of this.rng.shuffle(this.s.teams.filter((t) => t.controller === 'bot'))) {
-			for (const agent of chooseSignings(team, this.s.freeAgents, phase.day, FA_DAYS)) {
+			for (const agent of this.botFor(team.id).chooseSignings(team, this.s.freeAgents, phase.day, FA_DAYS)) {
 				this.sign(team, agent.fighter.id, true);
 			}
 		}
@@ -606,7 +608,7 @@ export default class MayhemManager extends GameLogicHandler {
 				team.equipment.push({ id: item.id, key: item.key, yearsLeft: NEW_EQUIPMENT_YEARS, yearsOwned: 0, timesRepaired: 0 });
 			}
 			// fighters without a plan get the bots' suggestion
-			chooseTraining(team);
+			this.botFor(team.id).chooseTraining(team);
 			for (const f of team.fighters) {
 				const plan = team.training[f.id];
 				if (plan?.kind === 'stat') f.stats[plan.stat] = Math.min(f.stats[plan.stat] + 1, MAX_STAT);

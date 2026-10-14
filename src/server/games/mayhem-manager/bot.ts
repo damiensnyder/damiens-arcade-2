@@ -222,3 +222,13 @@ export function chooseTraining(team: TeamState): void {
 export function chooseLineup(fighters: Fighter[], equipment: Equipment[]): Record<number, number[]> {
 	return assignLineup(fighters, equipment);
 }
+
+export interface BotPolicy {
+	decideOffseason: (team: TeamState, visibleFreeAgents: FreeAgent[]) => void;
+	chooseSignings: (team: TeamState, agents: FreeAgent[], day: number, lastDay: number) => FreeAgent[];
+	chooseShopping: (team: TeamState) => void;
+	chooseTraining: (team: TeamState) => void;
+	chooseLineup: (fighters: Fighter[], equipment: Equipment[]) => Record<number, number[]>;
+}
+
+export const BOT: BotPolicy = { decideOffseason, chooseSignings, chooseShopping, chooseTraining, chooseLineup };
