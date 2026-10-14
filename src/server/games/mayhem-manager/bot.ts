@@ -57,8 +57,6 @@ export function teamValue(fighters: Fighter[], gear: Gear[]): number {
 const CARRY_RETURN = 0.5;
 /** Candidates examined in full each round; the rest are screened on their value alone (for speed). */
 const SHORTLIST = 5;
-/** Random shops sampled to estimate what money is worth in the shop. */
-const SHOP_SAMPLES = 100;
 
 /** What a fighter adds to the team over `years` seasons, given the gear it has. */
 export function fighterGain(roster: Fighter[], gear: Gear[], f: Fighter, years: number): number {
@@ -73,26 +71,20 @@ export function itemGain(roster: Fighter[], gear: Gear[], item: Gear, years: num
 /** Something a bot could buy: what it costs, how long it lasts and what it would do. */
 type Option =
 	| { kind: 'fighter'; fighter: Fighter; price: number; years: number; decide?: () => void }
-	| { kind: 'item'; gear: Gear; price: number; years: number; decide?: () => void };
+	| { kind: 'item'; gear: Gear; price: number; years: number; decide?: () => void; expected?: { gain: number } };
 
 /**
- * Buys the best-returning option again and again until nothing left is worth it. An option is
- * worth it if its return beats `CARRY_RETURN` and also what the money it uses would earn later
- * (`later`, given the budget that would remain). Returns what was bought. Each purchase changes what
- * the rest are worth (a fifth fighter adds less than a fourth), so returns are recalculated every round.
+ * Buys the best-returning option again and again until nothing left returns `CARRY_RETURN` or fits
+ * the budget. Returns what was bought. Each purchase changes what the rest are worth (a fifth
+ * fighter adds less than a fourth), so returns are recalculated every round.
  */
-function spend(
-	options: Option[],
-	roster: Fighter[],
-	gear: Gear[],
-	budget: number,
-	later: (budget: number) => number = () => 0
-): { bought: Option[]; left: number } {
+function spend(options: Option[], roster: Fighter[], gear: Gear[], budget: number): { bought: Option[]; left: number } {
 	const bought: Option[] = [];
 	const remaining = options.slice();
 	for (;;) {
 		const affordable = remaining.filter((o) => o.price <= budget);
-		const gain = (o: Option) => (o.kind === 'fighter' ? fighterGain(roster, gear, o.fighter, o.years) : itemGain(roster, gear, o.gear, o.years));
+		const gain = (o: Option) =>
+			o.kind === 'fighter' ? fighterGain(roster, gear, o.fighter, o.years) : o.expected ? o.expected.gain : itemGain(roster, gear, o.gear, o.years);
 		// fighters are screened by standalone value, since there are many; items are all examined
 		const fighters = affordable
 			.filter((o) => o.kind === 'fighter')
@@ -101,10 +93,10 @@ function spend(
 			.slice(0, SHORTLIST)
 			.map((x) => x.o);
 		let best: Option | null = null;
-		let bestReturn = 0;
+		let bestReturn = CARRY_RETURN;
 		for (const o of [...fighters, ...affordable.filter((o) => o.kind === 'item')]) {
 			const r = gain(o) / Math.max(o.price, 1);
-			if (r > bestReturn && r >= Math.max(CARRY_RETURN, later(budget - o.price))) {
+			if (r > bestReturn) {
 				best = o;
 				bestReturn = r;
 			}
@@ -114,55 +106,30 @@ function spend(
 		remaining.splice(remaining.indexOf(best), 1);
 		budget -= best.price;
 		if (best.kind === 'fighter') roster = [...roster, best.fighter];
-		else gear = [...gear, best.gear];
+		else if (!best.expected) gear = [...gear, best.gear];
 	}
 }
 
 /**
- * What money is worth in the shop. The shop offers the best of a random few items, not the average
- * one, so this samples shops (SHOP_SAMPLES of them, the same ones every time) and finds how much the
- * fighters would gain, on average, from spending a given amount on the best-returning items in each.
- * Returns the return on the next dollars at any budget.
+ * The shop will offer a random few of the catalog's items, so each one has a small chance of being
+ * there. Bots count every item as a possible purchase scaled by that chance (the return is the same,
+ * but it only claims its share of the budget), which keeps money in reserve for gear that would
+ * help their fighters instead of spending it all on fighters.
  */
-function shopReturns(roster: Fighter[], gear: Gear[]): (budget: number) => number {
-	const gains = EQUIPMENT_KEYS.map((key) => ({ price: EQUIPMENT[key].price, gain: itemGain(roster, gear, { id: -1, key }, NEW_EQUIPMENT_YEARS) }));
-	const STEP = 10;
-	const MAX_BUDGET = 200;
-	const totals = new Array(MAX_BUDGET / STEP + 2).fill(0);
-	let seed = 12345;
-	const random = () => {
-		seed = (seed * 1664525 + 1013904223) >>> 0;
-		return seed / 4294967296;
-	};
-	for (let i = 0; i < SHOP_SAMPLES; i++) {
-		const shop = gains
-			.map((g) => ({ ...g, sort: random() }))
-			.sort((a, b) => a.sort - b.sort)
-			.slice(0, SHOP_SIZE)
-			.sort((a, b) => b.gain / b.price - a.gain / a.price);
-		for (let k = 0; k < totals.length; k++) {
-			let money = k * STEP;
-			let total = 0;
-			for (const item of shop) {
-				if (item.gain > 0 && item.price <= money) {
-					money -= item.price;
-					total += item.gain;
-				}
-			}
-			totals[k] += total / SHOP_SAMPLES;
-		}
-	}
-	return (budget) => {
-		const k = Math.min(Math.max(Math.floor(budget / STEP), 0), totals.length - 2);
-		return (totals[k + 1] - totals[k]) / STEP;
-	};
+function expectedShop(roster: Fighter[], gear: Gear[]): Option[] {
+	const chance = SHOP_SIZE / EQUIPMENT_KEYS.length;
+	return EQUIPMENT_KEYS.map((key): Option => {
+		const item = { id: -1, key };
+		const gain = itemGain(roster, gear, item, NEW_EQUIPMENT_YEARS);
+		return { kind: 'item', gear: item, price: EQUIPMENT[key].price * chance, years: NEW_EQUIPMENT_YEARS, expected: { gain: gain * chance } };
+	}).filter((o) => o.kind === 'item' && o.expected!.gain > 0);
 }
 
 /**
  * At the start of the offseason a bot lists everything it could buy this season: re-signs, repairs
  * and the free agents it can already see (at their day-1 prices). It funds that list best return
- * first, as long as each purchase beats what the same money would earn in the shop, then acts on the
- * re-signs and repairs it funded. Anything it didn't fund is let go. Only touches undecided items.
+ * first until the money runs out, then acts on the re-signs and repairs it funded. Anything it
+ * didn't fund is let go. Only touches undecided items.
  */
 export function decideOffseason(team: TeamState, visibleFreeAgents: FreeAgent[] = []): void {
 	const pendingContracts = team.expiring.filter((c) => c.decision === 'pending');
@@ -178,7 +145,7 @@ export function decideOffseason(team: TeamState, visibleFreeAgents: FreeAgent[] 
 		} })),
 		...visibleFreeAgents.filter((a) => a.signedBy === null).map((a): Option => ({ kind: 'fighter', fighter: a.fighter, price: a.prices[0] ?? freeAgentPrices(a.fighter)[0], years: FA_CONTRACT_YEARS }))
 	];
-	const plan = spend(options, team.fighters, team.equipment, team.money, shopReturns(team.fighters, team.equipment));
+	const plan = spend([...options, ...expectedShop(team.fighters, team.equipment)], team.fighters, team.equipment, team.money);
 	for (const o of plan.bought) o.decide?.();
 	for (const c of pendingContracts) if (c.decision === 'pending') c.decision = 'drop';
 	for (const r of pendingRepairs) if (r.decision === 'pending') r.decision = 'drop';
@@ -191,7 +158,7 @@ export function chooseSignings(team: TeamState, agents: FreeAgent[], day: number
 		.map((a): Option => ({ kind: 'fighter', fighter: a.fighter, price: a.prices[day - 1], years: FA_CONTRACT_YEARS, decide: () => picks.push(a) }));
 	const picks: FreeAgent[] = [];
 	const gear: Gear[] = team.equipment;
-	for (const o of spend(options, team.fighters, gear, team.money, shopReturns(team.fighters, gear)).bought) o.decide?.();
+	for (const o of spend([...options, ...expectedShop(team.fighters, gear)], team.fighters, gear, team.money).bought) o.decide?.();
 	return picks;
 }
 
