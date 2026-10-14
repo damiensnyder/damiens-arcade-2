@@ -52,7 +52,9 @@ Leagues can run for dozens of seasons, so the data that grows is kept out of tho
 
 Only equipment whose description has an `[attuned: …]` part can be attuned to. Fighters who refuse unattuned equipment can't use the rest. Charging equipment has a 1s cooldown unless its description says otherwise. Equipment without art yet borrows another item's images (`PLACEHOLDER_ART` in `catalog.ts`).
 
-Status effects: frozen (slower, cooldowns at half speed), burning (5 damage a second), taunted (can only attack the taunter), scared (runs from the nearest enemy and doesn't attack), and hyped (+2 stars to strength, speed and energy). All but hyped are negative.
+Status effects: frozen (slower, cooldowns at half speed), burning (5 damage a second), taunted (can only attack the taunter), scared (runs from the nearest enemy and doesn't attack), and hyped (+3 stars to all stats). All but hyped are negative.
+
+Overtime: from 30s into a fight, everyone standing loses half a star of toughness every 5s, so fights can't stall (with healing, say).
 
 To add equipment, add the display entry in `catalog.ts`, its behavior in `sim/behaviors.ts`, and images named after the key in kebab case under `static/mm/equipment/` (worn) and `static/mm/icons/` (shown in cards). If the effect is an attack or stat change, declare it as `attack` or `statMods` and the valuation handles it. For anything else, add `value` hints (extra DPS, or multipliers on DPS or effective HP).
 

@@ -1,6 +1,6 @@
 import type { FightEvent, Fighter, FighterVisual, TeamId } from '../../../../lib/games/mayhem-manager/types.js';
 import type { Rng } from '../rng.js';
-import { ARENA_SIZE, CROWDING_DISTANCE, MAX_FIGHT_SECONDS, TICK_LENGTH } from './constants.js';
+import { ARENA_SIZE, CROWDING_DISTANCE, MAX_FIGHT_SECONDS, OVERTIME_INTERVAL, OVERTIME_START, OVERTIME_TOUGHNESS_LOSS, TICK_LENGTH } from './constants.js';
 import { BattleFighter, round2, scaleVector } from './fighter.js';
 
 export interface Combatant {
@@ -38,6 +38,8 @@ export class Fight {
 	readonly ticks: FightEvent[][] = [];
 	private readonly logging: boolean;
 	private tickCount = 0;
+	/** Ticks since the fight started (after everyone spawned in). */
+	private fightTicks = 0;
 	private readonly money: Map<TeamId, number>;
 	private readonly moneyChange = new Map<TeamId, number>();
 
@@ -123,8 +125,20 @@ export class Fight {
 
 	private doTick(): void {
 		this.newTick();
+		this.fightTicks++;
+		this.overtime();
 		for (const f of this.fighters) f.upkeep();
 		for (const f of this.rng.shuffle(this.fighters.slice())) f.act();
+	}
+
+	/** Past OVERTIME_START, everyone standing loses some toughness every OVERTIME_INTERVAL seconds. */
+	private overtime(): void {
+		const seconds = this.fightTicks * TICK_LENGTH;
+		const ticksPerInterval = Math.round(OVERTIME_INTERVAL / TICK_LENGTH);
+		if (seconds < OVERTIME_START - 1e-6 || this.fightTicks % ticksPerInterval !== 0) return;
+		for (const f of this.fighters) {
+			if (f.hp > 0) f.changeStats({ toughness: -OVERTIME_TOUGHNESS_LOSS });
+		}
 	}
 
 	private newTick(): void {

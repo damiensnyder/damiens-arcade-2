@@ -90,7 +90,7 @@ function burn(target: BattleFighter, source: BattleFighter, seconds: number): vo
 	target.addEffect({ name: 'burning', remaining: seconds, negative: true, mods: {}, burn: 5, source, tint: [1, 0.5, 0, 0.35] });
 }
 
-const HYPE_MODS: Partial<Stats> = { strength: 4, speed: 4, energy: 4 };
+const HYPE_MODS: Partial<Stats> = ALL_STATS(6);
 
 function hype(target: BattleFighter, seconds: number): void {
 	target.addEffect({ name: 'hyped', remaining: seconds, negative: false, mods: HYPE_MODS, tint: [1, 0.9, 0.3, 0.25] });
@@ -122,22 +122,29 @@ function healValue(target: BattleFighter, amount: number, seconds: number): numb
 const REALIZED_DAMAGE = 0.5;
 
 /**
- * Giving teammates a status effect that changes their stats for a while: the extra damage it lets
- * them deal, valued like the user's own damage, per second spent. Only time beyond what's left of
- * the same effect counts.
+ * Giving fighters a status effect that changes their stats for a while, per second spent. It's
+ * worth the extra damage it lets them deal, valued like the user's own damage, plus the damage it
+ * saves them from taking, valued like healing. Only time beyond what's left of the same effect counts.
  */
-function boostValue(f: BattleFighter, effect: string, mods: Partial<Stats>, duration: number, seconds: number): number {
-	let damage = 0;
-	for (const t of f.teammates()) {
-		if (t === f) continue;
+function boostValue(f: BattleFighter, targets: BattleFighter[], effect: string, mods: Partial<Stats>, duration: number, seconds: number): number {
+	const negated = Object.fromEntries(Object.entries(mods).map(([k, v]) => [k, -v]));
+	// damage each of the user's team takes per second, roughly
+	const incoming = (REALIZED_DAMAGE * f.enemies().reduce((sum, e) => sum + e.danger(), 0)) / Math.max(f.teammates().length, 1);
+	let value = 0;
+	for (const t of targets) {
 		const existing = t.effects.find((e) => e.name === effect);
 		const extra = Math.max(duration - (existing?.remaining ?? 0), 0);
 		if (extra <= 0) continue;
-		const negated = Object.fromEntries(Object.entries(mods).map(([k, v]) => [k, -v]));
-		const gain = existing ? t.danger() - t.dangerWith(negated) : t.dangerWith(mods) - t.danger();
-		damage += gain * extra;
+		const [without, withIt] = existing ? [t.withMods(negated, () => stateOf(t)), stateOf(t)] : [stateOf(t), t.withMods(mods, () => stateOf(t))];
+		value += (withIt.danger - without.danger) * extra * REALIZED_DAMAGE * f.valuePerDamage;
+		const saved = (incoming * extra * (1 - withIt.taken / without.taken)) / without.taken;
+		if (saved > 0) value += (t.danger() * saved) / (t.effectiveHp() + saved);
 	}
-	return (damage * REALIZED_DAMAGE * f.valuePerDamage) / seconds;
+	return value / seconds;
+}
+
+function stateOf(t: BattleFighter): { danger: number; taken: number } {
+	return { danger: t.danger(), taken: t.damageTakenMultiplier() };
 }
 
 // ---- helpers for effects that change as the fight goes on ----
@@ -385,14 +392,14 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	noveltyArrowHat: { statMods: () => ({ accuracy: 3 }) },
 	flowerOfPower: {
 		action: {
-			priority: (item) => bestHeal(item.owner, item.attuned ? 25 : 20).value,
+			priority: (item) => bestHeal(item.owner, item.attuned ? 50 : 40).value,
 			perform: (item) => {
 				const f = item.owner;
 				if (f.charges < 1) {
 					f.charge();
 					return;
 				}
-				const amount = item.attuned ? 25 : 20;
+				const amount = item.attuned ? 50 : 40;
 				const { target } = bestHeal(f, amount);
 				if (!target) return;
 				f.charges -= 1;
@@ -405,7 +412,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	foamFinger: {
 		action: {
 			priority: (item) =>
-				boostValue(item.owner, 'hyped', HYPE_MODS, item.attuned ? 4 : 3, item.owner.actionTime(1, CHARGED_COOLDOWN)),
+				boostValue(item.owner, item.owner.teammates().filter((t) => t !== item.owner), 'hyped', HYPE_MODS, item.attuned ? 10 : 8, item.owner.actionTime(1, CHARGED_COOLDOWN)),
 			perform: (item) => {
 				const f = item.owner;
 				if (f.charges < 1) {
@@ -414,18 +421,19 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 				}
 				f.charges -= 1;
 				f.setCooldown(CHARGED_COOLDOWN);
-				for (const t of f.teammates()) if (t !== f) hype(t, item.attuned ? 4 : 3);
+				for (const t of f.teammates()) if (t !== f) hype(t, item.attuned ? 10 : 8);
 			}
 		},
 		value: { dpsMultiplier: (attuned) => (attuned ? 1.2 : 1.15) }
 	}
 };
 
-/** The standing teammate (or the fighter themself) it's worth most to heal. */
+/** The standing teammate (not the fighter themself) it's worth most to heal. */
 function bestHeal(f: BattleFighter, amount: number): { target: BattleFighter | null; value: number } {
 	const seconds = f.actionTime(1, CHARGED_COOLDOWN);
 	let best: { target: BattleFighter | null; value: number } = { target: null, value: 0 };
 	for (const t of f.teammates()) {
+		if (t === f) continue;
 		const value = healValue(t, amount, seconds);
 		if (value > best.value) best = { target: t, value };
 	}

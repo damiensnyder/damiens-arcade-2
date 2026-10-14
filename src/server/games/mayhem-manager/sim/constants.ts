@@ -1,5 +1,10 @@
 export const TICK_LENGTH = 0.2; // seconds
 export const MAX_FIGHT_SECONDS = 300;
+/** From this many seconds into a fight, everyone loses toughness every OVERTIME_INTERVAL seconds, so fights can't stall. */
+export const OVERTIME_START = 30;
+export const OVERTIME_INTERVAL = 5;
+/** Toughness lost each time (stat points; 1 is half a star). */
+export const OVERTIME_TOUGHNESS_LOSS = 1;
 export const ARENA_SIZE = 100; // meters
 export const CROWDING_DISTANCE = 3; // closer than this, fighters push apart
 export const MELEE_RANGE = 4;

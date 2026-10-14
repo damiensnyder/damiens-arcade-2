@@ -138,7 +138,7 @@ export class BattleFighter {
 	}
 
 	timeToCharge(): number {
-		return Math.max(6 - 0.4 * this.stats.energy, 1);
+		return Math.max(4.8 - 0.32 * this.stats.energy, 0.8);
 	}
 
 	damageTakenMultiplier(): number {
@@ -221,10 +221,10 @@ export class BattleFighter {
 		return this.timeToCharge() * Math.max(chargesNeeded - this.charges, 0) + Math.max(cooldown - this.cooldownReduction(), TICK_LENGTH);
 	}
 
-	/** danger() if this fighter's stats were changed by `mods`. */
-	dangerWith(mods: Partial<Stats>): number {
+	/** Works something out as if this fighter's stats were changed by `mods`. */
+	withMods<T>(mods: Partial<Stats>, fn: () => T): T {
 		this.applyMods(mods, 1);
-		const result = this.danger();
+		const result = fn();
 		this.applyMods(mods, -1);
 		return result;
 	}

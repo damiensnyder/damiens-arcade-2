@@ -75,8 +75,8 @@ const EQUIPMENT_LIST: EquipmentInfo[] = [
 	equipment('flamingoFloaty', 'Flamingo Floaty', ['legs'], 16, 'On hit taken: Prevent all damage. Remove Flamingo Floaty.', '*pop!*'),
 	equipment('cornDog', 'Corn Dog', ['hand'], 12, 'Single-use. Heals 40 HP.', 'surprisingly nutritious'),
 	// other actions
-	equipment('flowerOfPower', 'Flower of Power', ['hand'], 11, 'Heal a teammate for 20 [attuned: 25] HP. Requires 1 charge.'),
-	equipment('foamFinger', 'Foam Finger', ['hand'], 6, 'Make all teammates hyped for 3s [attuned: 4s]. Requires 1 charge.', 'rah rah rah! go team go'),
+	equipment('flowerOfPower', 'Flower of Power', ['hand'], 11, 'Heal a teammate for 40 [attuned: 50] HP. Requires 1 charge.'),
+	equipment('foamFinger', 'Foam Finger', ['hand'], 6, 'Make all teammates hyped for 8s [attuned: 10s]. Requires 1 charge.', 'rah rah rah! go team go'),
 	// stat changes
 	equipment('fullSuitOfArmor', 'Full Suit of Armor', ['head', 'torso', 'legs', 'feet'], 24, '+6 [attuned: +7.5] toughness, -1.5 speed.', 'clank. clank. clank. clank'),
 	equipment('sportsJersey', 'Sports Jersey', ['torso'], 22, '+0.5 to all stats for each other teammate still standing.', 'teamwork? i sure hope it does!'),

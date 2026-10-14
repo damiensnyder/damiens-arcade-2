@@ -236,14 +236,20 @@ function fight(snap: Member[], rng: Rng): { won: boolean; seconds: number } {
 // usage: for each action item, fighters who had it in a fight, and how many of them used it
 const equipped: Record<string, number> = {};
 const used: Record<string, number> = {};
+const uses: Record<string, number> = {};
 const usedThisFight = new Set<object>();
 for (const [key, b] of Object.entries(EQUIPMENT_BEHAVIORS)) {
 	if (!b.action) continue;
 	const perform = b.action.perform;
 	b.action.perform = (item) => {
 		const before = item.owner.charges;
+		const cooldownBefore = item.owner.cooldown;
 		perform(item);
-		if (item.owner.charges < before || !item.owner.items.includes(item)) usedThisFight.add(item);
+		const charged = item.owner.charges > before;
+		if (!charged && (item.owner.charges < before || !item.owner.items.includes(item) || item.owner.cooldown > cooldownBefore)) {
+			usedThisFight.add(item);
+			if (item.owner.team === 1) uses[key] = (uses[key] ?? 0) + 1;
+		}
 	};
 	const start = b.onFightStart;
 	b.onFightStart = (item) => {
@@ -284,20 +290,29 @@ for (const name of chosen.length ? chosen : Object.keys(VARIANTS)) {
 	let wins = 0;
 	let n = 0;
 	let seconds = 0;
+	const lengths: number[] = [];
 	for (const snap of snapshots) {
 		for (let i = 0; i < FIGHTS; i++) {
 			const r = fight(snap, rng);
 			recordUse();
 			wins += r.won ? 1 : 0;
 			seconds += r.seconds;
+			lengths.push(r.seconds);
 			n++;
 		}
 	}
 	const p = wins / n;
 	// fights within a snapshot are correlated, so this understates the error a little
 	const se = Math.sqrt((p * (1 - p)) / n);
-	console.log(`${name.padEnd(20)} ${(100 * p).toFixed(1)}% ±${(100 * se).toFixed(1)}   avg ${(seconds / n).toFixed(1)}s`);
+	lengths.sort((a, b) => a - b);
+	const q = (x: number) => lengths[Math.floor(x * (lengths.length - 1))].toFixed(0);
+	const inRange = lengths.filter((l) => l >= 15 && l < 40).length / lengths.length;
+	console.log(
+		`${name.padEnd(20)} ${(100 * p).toFixed(1)}% ±${(100 * se).toFixed(1)}   avg ${(seconds / n).toFixed(1)}s (median ${q(0.5)}, p90 ${q(0.9)}, p99 ${q(0.99)}; ${(100 * inRange).toFixed(0)}% in 15-40s)`
+	);
 }
 // team 1 always plays the unchanged policy
 console.log('action items used (by the unchanged side), share of fights where the holder used it at least once:');
-for (const key of Object.keys(equipped)) console.log(`  ${key.padEnd(16)} ${((100 * (used[key] ?? 0)) / equipped[key]).toFixed(0)}% of ${equipped[key]}`);
+for (const key of Object.keys(equipped)) {
+	console.log(`  ${key.padEnd(16)} ${((100 * (used[key] ?? 0)) / equipped[key]).toFixed(0)}% of ${equipped[key]}, ${((uses[key] ?? 0) / Math.max(used[key] ?? 0, 1)).toFixed(1)} uses per fight when used`);
+}

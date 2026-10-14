@@ -72,11 +72,11 @@ surprisingly nutritious
 
 Flower of Power
 hand, $11
-Heal a teammate for 20 [attuned: 25] HP. Requires 1 charge.
+Heal a teammate for 40 [attuned: 50] HP. Requires 1 charge.
 
 Foam Finger
 hand, $6
-Make all teammates hyped for 3s [attuned: 4s]. Requires 1 charge.
+Make all teammates hyped for 8s [attuned: 10s]. Requires 1 charge.
 rah rah rah! go team go
 
 ## Stat changes
