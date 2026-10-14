@@ -15,30 +15,54 @@ export const NEW_EQUIPMENT_YEARS = 2;
 export const REPAIR_YEARS = 2;
 export const MAX_STAT = 10;
 /** How much more than a fighter's price they ask for on each day of free agency. */
-export const FA_DAY_MARKUPS = [1.3, 1.15, 1];
+export const FA_DAY_MARKUPS = [1.2, 1.1, 1];
 /** How much more than their price fighters ask to re-sign (for a longer contract). */
-export const RESIGN_MARKUP = 1.3;
-const MIN_FIGHTER_PRICE = 25;
-const MAX_FIGHTER_PRICE = 65;
+export const RESIGN_MARKUP = 1.2;
+const BASE_FIGHTER_PRICE = 20;
+const PRICE_PER_STAT_POINT = 0.5;
+const MIN_FIGHTER_PRICE = 30;
+const MAX_FIGHTER_PRICE = 60;
+
+/** Expected change in each stat over a year from age alone. Training camp adds on top of this. */
+export function averageIncrease(age: number): number {
+	return age < 32 ? (26 - age) * 0.1 : (32 - age) * 0.07 - 0.5;
+}
 
 /**
- * What a fighter costs on the last day of free agency: $25, plus $1 per half-star (stat point),
- * plus whatever their ability is worth, kept between $25 and $65.
+ * A fighter's stat points averaged over a contract: the first season as they are now, each later
+ * one after another year of expected development (see averageIncrease). Young fighters are worth
+ * a little more than their stats show, and old ones a little less.
  */
-export function fighterPrice(f: Fighter): number {
-	const statPoints = STAT_NAMES.reduce((sum, stat) => sum + f.stats[stat], 0);
-	const price = Math.round(MIN_FIGHTER_PRICE + statPoints + (ABILITIES[f.ability]?.price ?? 0));
-	return Math.min(Math.max(price, MIN_FIGHTER_PRICE), MAX_FIGHTER_PRICE);
+export function projectedStatPoints(f: Fighter, years: number): number {
+	const stats = STAT_NAMES.map((stat) => f.stats[stat]);
+	let total = 0;
+	for (let year = 0; year < years; year++) {
+		if (year > 0) {
+			const change = averageIncrease(f.age + year);
+			for (let i = 0; i < stats.length; i++) stats[i] = Math.min(Math.max(stats[i] + change, 0), MAX_STAT);
+		}
+		total += stats.reduce((sum, stat) => sum + stat, 0);
+	}
+	return total / years;
+}
+
+/**
+ * What a fighter costs on the last day of free agency: $20, plus $0.50 per half-star (stat point)
+ * averaged over the contract, plus whatever their ability is worth, kept between $30 and $60.
+ */
+export function fighterPrice(f: Fighter, years = FA_CONTRACT_YEARS): number {
+	const price = BASE_FIGHTER_PRICE + PRICE_PER_STAT_POINT * projectedStatPoints(f, years) + (ABILITIES[f.ability]?.price ?? 0);
+	return Math.round(Math.min(Math.max(price, MIN_FIGHTER_PRICE), MAX_FIGHTER_PRICE));
 }
 
 /** Asking prices on each day of free agency. */
 export function freeAgentPrices(f: Fighter): number[] {
-	const price = fighterPrice(f);
+	const price = fighterPrice(f, FA_CONTRACT_YEARS);
 	return FA_DAY_MARKUPS.map((markup) => Math.round(price * markup));
 }
 
 export function resignPrice(f: Fighter): number {
-	return Math.round(fighterPrice(f) * RESIGN_MARKUP);
+	return Math.round(fighterPrice(f, RESIGN_CONTRACT_YEARS) * RESIGN_MARKUP);
 }
 
 /** Stats are tracked in fractions but shown in whole points (half-stars), so nearly-10 counts as maxed. */

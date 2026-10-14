@@ -1,14 +1,9 @@
 // How fighters change with age. Stats are tracked in fractions and only shown in whole points
 // (half-stars), so players can't tell a 4-star from a 4.2-star.
 
-import { MAX_STAT } from '../../../lib/games/mayhem-manager/rules.js';
+import { MAX_STAT, averageIncrease } from '../../../lib/games/mayhem-manager/rules.js';
 import { STAT_NAMES, type Fighter } from '../../../lib/games/mayhem-manager/types.js';
 import type { Rng } from './rng.js';
-
-/** Expected change in each stat over a year from age alone. Training camp adds on top of this. */
-export function averageIncrease(age: number): number {
-	return age < 32 ? (26 - age) * 0.1 : (32 - age) * 0.07 - 0.5;
-}
 
 /** How much each stat's yearly change varies. Young fighters are the least predictable. */
 function volatility(age: number): number {
