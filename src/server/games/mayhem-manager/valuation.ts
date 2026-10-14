@@ -9,21 +9,10 @@
 import { MAX_STAT, averageIncrease } from '../../../lib/games/mayhem-manager/rules.js';
 import { STAT_NAMES, type Fighter, type Stats } from '../../../lib/games/mayhem-manager/types.js';
 import { ABILITY_BEHAVIORS, EQUIPMENT_BEHAVIORS, FISTS, attackStats, type Behavior } from './sim/behaviors.js';
-import { TICK_LENGTH } from './sim/constants.js';
+import { ARENA_SIZE, MELEE_RANGE, START_INSET, TICK_LENGTH, TYPICAL_FIGHT_SECONDS } from './sim/constants.js';
 
 /** How many enemies an area attack is assumed to hit. */
 const AOE_TARGETS = 2;
-// Fit to simulated fights between random teams: melee fighters lose time walking and being kited,
-// ranged ones get free shots. (Without these, ranged weapons were badly undervalued.)
-const MELEE_EFF = 0.65;
-const RANGED_EFF = 1.3;
-/**
- * A fighter's body is worth a lot by itself: in simulated fights, each extra fighter, however
- * weak, adds about as much as a typical fighter's skill does. So the zero point of fighter value
- * sits near a fighter with no skill at all (√power ≈ 6), not far below it. (Valuing bodies more
- * than this made bots hire extra fighters instead of buying gear, and they won less.)
- */
-const BODY_OFFSET = 6;
 
 interface Part {
 	key: string;
@@ -63,6 +52,9 @@ export function fighterPower(fighter: Fighter, equipment: string[]): PowerEstima
 	const parts = partsOf(fighter, equipment);
 	const s = effectiveStats(fighter, equipment);
 	const meleeMult = (stat: keyof Stats = 'strength') => Math.max(0.5 + 0.1 * s[stat], 0.25);
+	// melee fighters can't attack until they've crossed the arena, which takes longer the slower they are
+	const approachSeconds = Math.max(ARENA_SIZE - 2 * START_INSET - MELEE_RANGE, 0) / Math.max(5 + s.speed, 1);
+	const meleeUptime = Math.max((TYPICAL_FIGHT_SECONDS - approachSeconds) / TYPICAL_FIGHT_SECONDS, 0.2);
 	const hitChance = Math.max(0, Math.min(0.25 + 0.05 * s.accuracy, 1));
 	const timeToCharge = Math.max(4.8 - 0.32 * s.energy, 0.8);
 	const damageTaken = Math.max(1.25 - 0.05 * s.toughness, 0.5);
@@ -78,8 +70,8 @@ export function fighterPower(fighter: Fighter, equipment: string[]): PowerEstima
 		const cycle = Math.max(cooldown - cooldownReduction, TICK_LENGTH) + charges * timeToCharge;
 		const perUse =
 			spec.kind === 'melee'
-				? damage * (spec.fixed ? 1 : meleeMult(spec.scalesWith)) * MELEE_EFF
-				: spec.kind === 'ranged' ? damage * hitChance * RANGED_EFF : damage * AOE_TARGETS;
+				? damage * (spec.fixed ? 1 : meleeMult(spec.scalesWith)) * meleeUptime
+				: spec.kind === 'ranged' ? damage * hitChance : damage * AOE_TARGETS;
 		if (perUse / cycle > dps) {
 			dps = perUse / cycle;
 			attacksPerSecond = 1 / cycle;
@@ -96,17 +88,15 @@ export function fighterPower(fighter: Fighter, equipment: string[]): PowerEstima
 		ehp *= hints.ehpMultiplier?.(part.attuned) ?? 1;
 	}
 
-	// speed helps melee fighters close in and everyone else stay out of reach
-	const mobility = Math.max(0.7, Math.min(1.3, 1 + 0.03 * (s.speed - 5)));
-	if (bestKind === 'melee') dps *= mobility;
-	else ehp *= mobility;
+	// speed helps everyone else stay out of reach (a melee fighter's speed is counted in their uptime)
+	if (bestKind !== 'melee') ehp *= Math.max(0.7, Math.min(1.3, 1 + 0.03 * (s.speed - 5)));
 
 	return { dps, ehp, power: dps * ehp };
 }
 
 /** Converts power to dollars. Square root because a team's strength adds up roughly like √power. */
 export function powerToDollars(power: number): number {
-	return 4.2 * (Math.sqrt(Math.max(power, 0)) - BODY_OFFSET);
+	return 4.2 * Math.sqrt(Math.max(power, 0));
 }
 
 /** Loadouts used to judge a fighter's potential, so accuracy and energy count for something. */

@@ -8,6 +8,10 @@ export const OVERTIME_TOUGHNESS_LOSS = 1;
 export const ARENA_SIZE = 100; // meters
 export const CROWDING_DISTANCE = 3; // closer than this, fighters push apart
 export const MELEE_RANGE = 4;
+/** In a two-team fight, each side starts this far in from its edge of the arena. */
+export const START_INSET = 22;
+/** How long fights usually last, for estimating how much of one a fighter spends doing what. */
+export const TYPICAL_FIGHT_SECONDS = 20;
 export const INITIAL_COOLDOWN = 3;
 export const KNOCKBACK_ROTATION = Math.PI / 12;
 export const EPSILON = 0.00001;

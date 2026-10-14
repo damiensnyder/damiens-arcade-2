@@ -1,6 +1,6 @@
 import type { FightEvent, Fighter, FighterVisual, TeamId } from '../../../../lib/games/mayhem-manager/types.js';
 import type { Rng } from '../rng.js';
-import { ARENA_SIZE, CROWDING_DISTANCE, MAX_FIGHT_SECONDS, OVERTIME_INTERVAL, OVERTIME_START, OVERTIME_TOUGHNESS_LOSS, TICK_LENGTH } from './constants.js';
+import { ARENA_SIZE, START_INSET, CROWDING_DISTANCE, MAX_FIGHT_SECONDS, OVERTIME_INTERVAL, OVERTIME_START, OVERTIME_TOUGHNESS_LOSS, TICK_LENGTH } from './constants.js';
 import { roundStats } from '../public.js';
 import { BattleFighter, round2, scaleVector } from './fighter.js';
 
@@ -85,7 +85,7 @@ export class Fight {
 			const slot = squad.indexOf(f);
 			if (teams.length === 2) {
 				// two lines facing each other
-				f.x = side === 0 ? 22 : ARENA_SIZE - 22;
+				f.x = side === 0 ? START_INSET : ARENA_SIZE - START_INSET;
 				f.y = ((slot + 1) * ARENA_SIZE) / (squad.length + 1);
 				f.facing = side === 0 ? -1 : 1;
 			} else {
