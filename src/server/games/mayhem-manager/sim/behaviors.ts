@@ -428,12 +428,11 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	}
 };
 
-/** The standing teammate (not the fighter themself) it's worth most to heal. */
+/** The standing teammate (or the fighter themself) it's worth most to heal. */
 function bestHeal(f: BattleFighter, amount: number): { target: BattleFighter | null; value: number } {
 	const seconds = f.actionTime(1, CHARGED_COOLDOWN);
 	let best: { target: BattleFighter | null; value: number } = { target: null, value: 0 };
 	for (const t of f.teammates()) {
-		if (t === f) continue;
 		const value = healValue(t, amount, seconds);
 		if (value > best.value) best = { target: t, value };
 	}
