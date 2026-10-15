@@ -9,7 +9,7 @@
 
 import type { Stats } from '../../../../lib/games/mayhem-manager/types.js';
 import type { BattleFighter, BattleItem, StatusEffect } from './fighter.js';
-import { MELEE_RANGE, TICK_LENGTH } from './constants.js';
+import { MELEE_RANGE, TICK_LENGTH, TYPICAL_FIGHT_SECONDS, TYPICAL_HIT } from './constants.js';
 
 export interface AttackSpec {
 	kind: 'melee' | 'ranged' | 'aoe';
@@ -28,14 +28,49 @@ export interface AttackSpec {
 	damageAt?: (item: BattleItem, target: BattleFighter) => number;
 }
 
-/** Rough numbers the valuation uses for effects it can't read off an attack or stat mod. */
+/** What the valuation knows about the wearer and their fight, for hints that depend on it. */
+export interface ValueContext {
+	/** Hits the wearer's primary attack lands per second. */
+	hitsPerSecond: number;
+	/** Hits the wearer takes before going down, roughly. */
+	hitsTaken: number;
+	timeToCharge: number;
+	/** Seconds before anyone can act. */
+	startDelay: number;
+	teammates: number;
+	enemies: number;
+	/** Damage per second of a typical enemy. */
+	enemyDps: number;
+	/** Immune to negative status effects. */
+	immune: boolean;
+}
+
+/**
+ * How the valuation (../valuation.ts) counts effects it can't read off an attack or stat mod, in
+ * its own terms: output (damage or healing per second) and HP.
+ */
 export interface ValueHints {
-	/** Extra damage per second, given the wearer's attacks per second. */
-	bonusDps?: (attuned: boolean, attacksPerSecond: number) => number;
-	/** Multiplier on effective HP. */
-	ehpMultiplier?: (attuned: boolean) => number;
-	/** Multiplier on damage per second. */
-	dpsMultiplier?: (attuned: boolean) => number;
+	/** Extra damage per second. One-time damage counts spread over a typical fight. */
+	dps?: (attuned: boolean, ctx: ValueContext) => number;
+	/** Extra HP (one-time healing, a blocked hit). */
+	hp?: (attuned: boolean, ctx: ValueContext) => number;
+	/** Share of hits taken that do nothing. */
+	blocked?: (attuned: boolean) => number;
+	/** Stats gained on average over a fight. */
+	stats?: (attuned: boolean, ctx: ValueContext) => Partial<Stats>;
+	/** Multiplier on the wearer's output (for time lost to being scared and the like). */
+	output?: (attuned: boolean, ctx: ValueContext) => number;
+	/** Multiplier on how much enemies want to target the wearer (for the valuation; the sim uses targetWeight). */
+	weight?: number;
+	/** Brings back the first teammate to go down, with this share of their HP. */
+	revive?: number;
+	/** Share of the fight teammates spend hyped. */
+	teamHype?: (attuned: boolean, ctx: ValueContext) => number;
+	/**
+	 * A support action the wearer can use instead of attacking: healing per second, the share of the
+	 * fight teammates end up hyped, and the share of the wearer's time it takes.
+	 */
+	action?: (attuned: boolean, ctx: ValueContext) => { healing?: number; hype?: number; busy: number };
 }
 
 export interface Behavior {
@@ -90,7 +125,7 @@ function burn(target: BattleFighter, source: BattleFighter, seconds: number): vo
 	target.addEffect({ name: 'burning', remaining: seconds, negative: true, mods: {}, burn: 5, source, tint: [1, 0.5, 0, 0.35] });
 }
 
-const HYPE_MODS: Partial<Stats> = ALL_STATS(6);
+export const HYPE_MODS: Partial<Stats> = ALL_STATS(6);
 
 function hype(target: BattleFighter, seconds: number): void {
 	target.addEffect({ name: 'hyped', remaining: seconds, negative: false, mods: HYPE_MODS, tint: [1, 0.9, 0.3, 0.25] });
@@ -179,6 +214,25 @@ function zap(from: BattleFighter, target: BattleFighter, amount: number): void {
 	from.dealDamage(target, Math.ceil(amount * target.damageTakenMultiplier()), true);
 }
 
+// ---- what effects amount to, for the valuation ----
+
+/** How often a shield's wearer is facing whoever hits them. */
+const FACING_ATTACKER = 0.7;
+/** How much of a fight a melee fighter spends with an enemy in reach. */
+const IN_MELEE = 0.5;
+
+/** Freezing a target on each hit: it attacks at half speed while frozen. */
+function freezeValue(seconds: number, ctx: ValueContext): number {
+	return 0.5 * ctx.enemyDps * Math.min(1, seconds * ctx.hitsPerSecond);
+}
+
+/** Hyping teammates for `seconds` per charge: kept up as much as charging allows, once the first charge is in. */
+function hypeAction(seconds: number, ctx: ValueContext): { hype: number; busy: number } {
+	const cycle = ctx.timeToCharge + CHARGED_COOLDOWN;
+	const started = Math.max(1 - (ctx.startDelay + ctx.timeToCharge) / TYPICAL_FIGHT_SECONDS, 0);
+	return { hype: Math.min(1, seconds / cycle) * started, busy: Math.min(1, cycle / seconds) };
+}
+
 export const FISTS: Behavior = {
 	attack: { kind: 'melee', damage: [12, 12], cooldown: [2.4, 2.4], knockback: 1 }
 };
@@ -197,7 +251,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 				f.log({ type: 'animation', fighter: f.index, updates: { equipment: f.wornKeys() } });
 			}
 		},
-		value: { ehpMultiplier: () => 1.4 }
+		value: { hp: () => 40 }
 	},
 	devilHorns: {
 		statMods: (attuned) => {
@@ -209,7 +263,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	fairyHat: {
 		passiveDanger: () => 2,
 		onHitDealt: (item, target) => freeze(target, item.attuned ? 3 : 2),
-		value: { dpsMultiplier: (attuned) => (attuned ? 1.25 : 1.18) }
+		value: { dps: (attuned, ctx) => freezeValue(attuned ? 3 : 2, ctx) }
 	},
 	flamingoFloaty: {
 		preventHit: (item) => {
@@ -219,22 +273,22 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			f.log({ type: 'animation', fighter: f.index, updates: { equipment: f.wornKeys() } });
 			return true;
 		},
-		value: { ehpMultiplier: () => 1.3 }
+		value: { hp: () => TYPICAL_HIT }
 	},
-	frillySkirt: { targetWeight: 0.02, value: { ehpMultiplier: () => 1.6 } },
+	frillySkirt: { targetWeight: 0.02 },
 	fullSuitOfArmor: { statMods: (attuned) => ({ toughness: attuned ? 15 : 12, speed: -3 }) },
 	jellyhat: {
 		onHitTaken: (item, attacker, _damage, source) => {
 			if (source.behavior.attack?.kind === 'melee') zap(item.owner, attacker, item.attuned ? 15 : 10);
 		},
-		value: { bonusDps: (attuned) => (attuned ? 3.5 : 2.5) }
+		value: { dps: (attuned, ctx) => ((attuned ? 15 : 10) * ctx.hitsTaken) / TYPICAL_FIGHT_SECONDS }
 	},
 	laserBlaster: {
 		attack: { kind: 'ranged', damage: [40, 50], cooldown: [2, 2], knockback: 1, projectile: '/mm/projectiles/laser.png' }
 	},
 	rhinocerosBeetleHorn: {
 		onHitDealt: (item) => item.owner.changeStats({ strength: item.attuned ? 3 : 2 }),
-		value: { dpsMultiplier: () => 1.15 }
+		value: { stats: (attuned, ctx) => ({ strength: ((attuned ? 3 : 2) * ctx.hitsPerSecond * TYPICAL_FIGHT_SECONDS) / 2 }) }
 	},
 	rollerBlades: {
 		attack: { kind: 'melee', damage: [30, 30], cooldown: [4, 4], knockback: 2 },
@@ -249,7 +303,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			f.log({ type: 'text', fighter: f.index, text: 'blocked', color: '#aaa' });
 			return true;
 		},
-		value: { ehpMultiplier: () => 1.4 }
+		value: { blocked: () => 0.5 * FACING_ATTACKER }
 	},
 	shiv: { attack: { kind: 'melee', damage: [16, 16], cooldown: [2, 1.5], knockback: 1 } },
 	snowmanHead: {
@@ -257,7 +311,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		onHitDealt: (item, target, _damage, source) => {
 			if (source === item) freeze(target, item.attuned ? 2 : 1);
 		},
-		value: { dpsMultiplier: (attuned) => (attuned ? 1.3 : 1.2) }
+		value: { dps: (attuned, ctx) => freezeValue(attuned ? 2 : 1, ctx) }
 	},
 	sportsJersey: {
 		onTick: (item) => {
@@ -265,7 +319,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			const others = f.teammates().filter((t) => t !== f).length;
 			setAllStatsBonus(item, others);
 		},
-		value: { dpsMultiplier: () => 1.12, ehpMultiplier: () => 1.08 }
+		value: { stats: (_attuned, ctx) => ALL_STATS(ctx.teammates / 2) }
 	},
 	vikingHelmet: {
 		statMods: () => ({ toughness: 2 }),
@@ -277,7 +331,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			item.state.applied = bonus;
 			f.changeStats({ strength: diff });
 		},
-		value: { dpsMultiplier: (attuned) => (attuned ? 1.15 : 1.1) }
+		value: { stats: (attuned) => ({ strength: attuned ? 5 : 4 }) }
 	},
 	wandOfFlames: {
 		attack: {
@@ -291,7 +345,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		onHitDealt: (item, target, _damage, source) => {
 			if (source === item) burn(target, item.owner, 5);
 		},
-		value: { bonusDps: (_attuned, attacksPerSecond) => 25 * 2 * attacksPerSecond }
+		value: { dps: (_attuned, ctx) => 25 * (1 + 0.5 * Math.max(ctx.enemies - 1, 0)) * ctx.hitsPerSecond }
 	},
 	zapHelmet: {
 		passiveDanger: (item) => (item.attuned ? 20 : 15) / 3,
@@ -303,7 +357,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 				f.log({ type: 'projectile', fighter: f.index, target: target.index, img: '/mm/projectiles/laser.png' });
 				zap(f, target, item.attuned ? 20 : 15);
 			}),
-		value: { bonusDps: (attuned) => (attuned ? 20 : 15) / 3 }
+		value: { dps: (attuned) => (attuned ? 20 : 15) / 3 }
 	},
 	headbuttersDelight: {
 		attack: { kind: 'melee', damage: [20, 25], cooldown: [3, 3], knockback: 1.5, scalesWith: 'toughness' }
@@ -317,7 +371,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 					if (f.distanceTo(e) <= MELEE_RANGE) zap(f, e, item.attuned ? 5 : 4);
 				}
 			}),
-		value: { bonusDps: (attuned) => (attuned ? 4 : 3) }
+		value: { dps: (attuned) => (attuned ? 5 : 4) * IN_MELEE }
 	},
 	moneySword: {
 		attack: {
@@ -339,7 +393,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			teammate.log({ type: 'animation', fighter: teammate.index, updates: { hp: teammate.hp } });
 			teammate.log({ type: 'text', fighter: teammate.index, text: 'revived!', color: '#eeb' });
 		},
-		value: { ehpMultiplier: () => 1.3 }
+		value: { revive: 0.5 }
 	},
 	eyepatch: {
 		onKo: (item, victim) => {
@@ -356,7 +410,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 				if (other !== f && other.hp > 0 && f.distanceTo(other) <= 10) zap(f, other, 40);
 			}
 		},
-		value: { bonusDps: () => 2 }
+		value: { dps: (_attuned, ctx) => (40 * Math.min(ctx.enemies, 2)) / TYPICAL_FIGHT_SECONDS }
 	},
 	knifeShoes: {
 		onTick: (item) => {
@@ -367,17 +421,16 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 				item.state[e.index] = inRange;
 			}
 		},
-		value: { bonusDps: (attuned) => (attuned ? 1.8 : 1.5) }
+		value: { dps: (attuned, ctx) => ((attuned ? 6 : 5) * 2 * ctx.enemies) / TYPICAL_FIGHT_SECONDS }
 	},
 	censoredBar: {
-		blocksEffect: (_item, effect) => effect.negative,
-		value: { ehpMultiplier: () => 1.08 }
+		blocksEffect: (_item, effect) => effect.negative
 	},
 	theRatioInator: {
 		attack: {
 			kind: 'melee',
-			// typical: 30% of a target at 60 HP
-			damage: [18, 24],
+			// typical: 30% of a target at 80 HP
+			damage: [24, 32],
 			cooldown: [2.5, 2.5],
 			knockback: 1,
 			fixed: true,
@@ -407,7 +460,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 				heal(target, amount);
 			}
 		},
-		value: { ehpMultiplier: (attuned) => (attuned ? 1.25 : 1.2) }
+		value: { action: (attuned, ctx) => ({ healing: (attuned ? 50 : 40) / (ctx.timeToCharge + CHARGED_COOLDOWN), busy: 1 }) }
 	},
 	foamFinger: {
 		action: {
@@ -424,7 +477,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 				for (const t of f.teammates()) if (t !== f) hype(t, item.attuned ? 10 : 8);
 			}
 		},
-		value: { dpsMultiplier: (attuned) => (attuned ? 1.2 : 1.15) }
+		value: { action: (attuned, ctx) => hypeAction(attuned ? 10 : 8, ctx) }
 	}
 };
 
@@ -443,16 +496,16 @@ export const ABILITY_BEHAVIORS: Record<string, Behavior> = {
 	noAbilities: {},
 	extraDamageOnHit: {
 		onHitDealt: (item, target) => item.owner.dealDamage(target, 5),
-		value: { bonusDps: (_attuned, attacksPerSecond) => 5 * attacksPerSecond }
+		value: { dps: (_attuned, ctx) => 5 * ctx.hitsPerSecond }
 	},
 	gainStrengthOnHitTaken: {
 		onHitTaken: (item) => item.owner.changeStats({ strength: 2 }),
-		value: { dpsMultiplier: () => 1.1 }
+		value: { stats: (_attuned, ctx) => ({ strength: ctx.hitsTaken }) }
 	},
 	powerfulFists: {
 		attack: { kind: 'melee', damage: [24, 24], cooldown: [2.4, 2.4], knockback: 1.5 }
 	},
-	shorterCooldowns: { cooldownReduction: 0.2, value: { dpsMultiplier: () => 1.07 } },
+	shorterCooldowns: { cooldownReduction: 0.2 },
 	moneyOnKo: {
 		onKo: (item) => {
 			const f = item.owner;
@@ -462,28 +515,30 @@ export const ABILITY_BEHAVIORS: Record<string, Behavior> = {
 	},
 	lifesteal: {
 		onHitDealt: (item, _target, damage) => heal(item.owner, damage * 0.2),
-		value: { ehpMultiplier: () => 1.15 }
+		value: { output: () => 1.2 }
 	},
 	pepTalk: {
 		onFightStart: (item) => {
 			for (const t of item.owner.teammates()) if (t !== item.owner) hype(t, 5);
-		}
+		},
+		value: { teamHype: () => 5 / TYPICAL_FIGHT_SECONDS }
 	},
 	taunt: {
 		onTick: (item) => {
 			const f = item.owner;
 			for (const e of f.enemies()) if (f.distanceTo(e) <= MELEE_RANGE) taunt(e, f);
-		}
+		},
+		value: { weight: 3 }
 	},
 	scaredWhenHit: {
 		onHitTaken: (item) => scare(item.owner, 3),
-		value: { dpsMultiplier: () => 0.85 }
+		// scared fighters run, so they take about half as many hits as they otherwise would
+		value: { output: (_attuned, ctx) => (ctx.immune ? 1 : 1 - Math.min(0.8, (3 * ctx.hitsTaken) / 2 / TYPICAL_FIGHT_SECONDS)) }
 	},
 	// handled in the league after training camp
 	mentor: {},
 	bully: {
-		damageMultiplier: (_item, target) => (target.effects.some((e) => e.negative) ? 2 : 1),
-		value: { dpsMultiplier: () => 1.1 }
+		damageMultiplier: (_item, target) => (target.effects.some((e) => e.negative) ? 2 : 1)
 	},
 	// nothing summons yet
 	strongerSummons: {},
@@ -496,14 +551,13 @@ export const ABILITY_BEHAVIORS: Record<string, Behavior> = {
 			const alone = item.state.hadTeammates === 1 && f.teammates().every((t) => t === f);
 			setAllStatsBonus(item, alone ? 6 : 0);
 		},
-		value: { dpsMultiplier: () => 1.05, ehpMultiplier: () => 1.05 }
+		value: { stats: (_attuned, ctx) => ALL_STATS(6 / (2 * (ctx.teammates + 1))) }
 	},
 	randomAbility: {
 		onFightStart: (item) => {
 			const key = item.owner.fight.rng.pick(RANDOM_ABILITY_POOL);
 			item.owner.addAbility(key, ABILITY_BEHAVIORS[key]);
-		},
-		value: { dpsMultiplier: () => 1.05 }
+		}
 	},
 	klutz: {
 		onHitTaken: (item) => {
@@ -514,14 +568,12 @@ export const ABILITY_BEHAVIORS: Record<string, Behavior> = {
 			f.removeItem(f.fight.rng.pick(handheld));
 			f.log({ type: 'text', fighter: f.index, text: 'dropped it!', color: '#aaa' });
 			f.log({ type: 'animation', fighter: f.index, updates: { equipment: f.wornKeys() } });
-		},
-		value: { dpsMultiplier: () => 0.92 }
+		}
 	},
 	// handled when the fighter is set up: unattuned equipment is left out
 	refusesUnattuned: {},
 	immuneToNegativeEffects: {
-		blocksEffect: (_item, effect) => effect.negative,
-		value: { ehpMultiplier: () => 1.05 }
+		blocksEffect: (_item, effect) => effect.negative
 	},
 	// handled in training camp
 	cantAttune: {}

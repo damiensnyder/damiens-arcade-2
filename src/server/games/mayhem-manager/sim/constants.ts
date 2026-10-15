@@ -12,6 +12,8 @@ export const MELEE_RANGE = 4;
 export const START_INSET = 22;
 /** How long fights usually last, for estimating how much of one a fighter spends doing what. */
 export const TYPICAL_FIGHT_SECONDS = 20;
+/** About how much damage one hit does, before toughness, for estimating how many hits a fighter takes. */
+export const TYPICAL_HIT = 25;
 export const INITIAL_COOLDOWN = 3;
 export const KNOCKBACK_ROTATION = Math.PI / 12;
 export const EPSILON = 0.00001;
