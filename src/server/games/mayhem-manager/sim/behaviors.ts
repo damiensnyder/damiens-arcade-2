@@ -39,8 +39,6 @@ export interface ValueContext {
 	startDelay: number;
 	teammates: number;
 	enemies: number;
-	/** Damage per second of a typical enemy. */
-	enemyDps: number;
 	/** Immune to negative status effects. */
 	immune: boolean;
 }
@@ -221,9 +219,12 @@ const FACING_ATTACKER = 0.7;
 /** How much of a fight a melee fighter spends with an enemy in reach. */
 const IN_MELEE = 0.5;
 
+/** Damage per second of a typical enemy. */
+const TYPICAL_DPS = 10;
+
 /** Freezing a target on each hit: it attacks at half speed while frozen. */
 function freezeValue(seconds: number, ctx: ValueContext): number {
-	return 0.5 * ctx.enemyDps * Math.min(1, seconds * ctx.hitsPerSecond);
+	return 0.5 * TYPICAL_DPS * Math.min(1, seconds * ctx.hitsPerSecond);
 }
 
 /** Hyping teammates for `seconds` per charge: kept up as much as charging allows, once the first charge is in. */

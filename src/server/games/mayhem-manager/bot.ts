@@ -28,8 +28,8 @@ function puttingOn(worn: Worn, i: number, item: Gear): Worn {
 }
 
 /** The best place for one more item, without rearranging anything else: [log value, lineup]. */
-function placeItem(fighters: Fighter[], worn: Worn, item: Gear): [number, Worn] {
-	let best: [number, Worn] = [logValue(fighters, worn), worn];
+function placeItem(fighters: Fighter[], worn: Worn, item: Gear, current = logValue(fighters, worn)): [number, Worn] {
+	let best: [number, Worn] = [current, worn];
 	for (let i = 0; i < fighters.length; i++) {
 		const option = puttingOn(worn, i, item);
 		const value = logValue(fighters, option);
@@ -45,11 +45,11 @@ function placeItem(fighters: Fighter[], worn: Worn, item: Gear): [number, Worn] 
 function arrange(fighters: Fighter[], gear: Gear[], start?: Worn): Worn {
 	let worn: Worn = start ?? fighters.map(() => []);
 	let value = logValue(fighters, worn);
-	for (const item of gear) if (!worn.some((w) => w.includes(item))) [value, worn] = placeItem(fighters, worn, item);
+	for (const item of gear) if (!worn.some((w) => w.includes(item))) [value, worn] = placeItem(fighters, worn, item, value);
 	for (let pass = 0; pass < 3; pass++) {
 		let improved = false;
 		for (const item of gear) {
-			const [v, w] = placeItem(fighters, worn, item);
+			const [v, w] = placeItem(fighters, worn, item, value);
 			if (v > value + 1e-9) {
 				[value, worn] = [v, w];
 				improved = true;
@@ -112,19 +112,30 @@ function spend(options: Option[], fighters: Fighter[], gear: Gear[], budget: num
 	const bought: Option[] = [];
 	const remaining = options.slice();
 	let plan = planFor(fighters, gear);
-	const alone = (f: Fighter) => logValue([f], [[]]);
+	// fighters count as they're expected to develop over the contract
+	const projected = new Map(options.filter((o) => o.fighter).map((o) => [o, projectedFighter(o.fighter!, o.years)]));
+	const alone = new Map([...projected].map(([o, f]) => [o, logValue([f], [[]]) - Math.log(o.price)]));
+	// what each option would add to the current plan; only recomputed once the plan changes
+	let gains = new Map<Option, number>();
+	const gainOf = (o: Option): number => {
+		let gain = gains.get(o);
+		if (gain === undefined) {
+			const after = o.fighter ? withFighter(plan, projected.get(o)!) : placeItem(plan.fighters, plan.worn, o.gear!, plan.value)[0];
+			gain = (after - plan.value) * o.years * (o.chance ?? 1);
+			gains.set(o, gain);
+		}
+		return gain;
+	};
 	for (;;) {
 		const affordable = remaining.filter((o) => o.price <= budget);
 		const candidates = affordable
 			.filter((o) => o.fighter)
-			.sort((a, b) => alone(b.fighter!) - Math.log(b.price) - (alone(a.fighter!) - Math.log(a.price)))
+			.sort((a, b) => alone.get(b)! - alone.get(a)!)
 			.slice(0, SHORTLIST);
 		let best: Option | null = null;
 		let bestReturn = 0;
 		for (const o of [...candidates, ...affordable.filter((o) => o.gear)]) {
-			// fighters count as they're expected to develop over the contract
-			const after = o.fighter ? withFighter(plan, projectedFighter(o.fighter, o.years)) : placeItem(plan.fighters, plan.worn, o.gear!)[0];
-			const r = ((after - plan.value) * o.years * (o.chance ?? 1)) / Math.max(o.price, 1);
+			const r = gainOf(o) / Math.max(o.price, 1);
 			if (r > bestReturn) {
 				best = o;
 				bestReturn = r;
@@ -136,6 +147,7 @@ function spend(options: Option[], fighters: Fighter[], gear: Gear[], budget: num
 		budget -= best.price;
 		if (best.fighter) plan = planFor([...plan.fighters, best.fighter], plan.gear);
 		else if (!best.chance) plan = planFor(plan.fighters, [...plan.gear, best.gear!]);
+		if (!best.chance) gains = new Map();
 	}
 }
 

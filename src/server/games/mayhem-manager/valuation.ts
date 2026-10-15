@@ -81,37 +81,40 @@ export interface Surroundings {
 	teammates: number;
 	/** Enemies standing, on average over the fight. */
 	enemies: number;
-	/** Damage per second of a typical enemy. */
-	enemyDps: number;
 	/** Share of the fight this fighter is hyped by teammates. */
 	hyped: number;
 }
 
-const ALONE: Surroundings = { teammates: 0, enemies: 1, enemyDps: 10, hyped: 0 };
+const ALONE: Surroundings = { teammates: 0, enemies: 1, hyped: 0 };
 
 /**
  * One fighter wearing the given equipment keys. With `support`, they use their support action
  * (healing a teammate, hyping the team) instead of attacking, for as much of the fight as it takes.
  */
 export function estimate(fighter: Fighter, equipment: string[], around: Surroundings = ALONE, support = false): Estimate {
-	// bots ask about the same fighters and loadouts over and over
+	// bots ask about the same fighters and loadouts over and over; fighters change between
+	// phases (training, aging), so entries are only good while their stats are the same
+	let entry = CACHE.get(fighter);
 	const s = fighter.stats;
-	const key = `${s.strength},${s.accuracy},${s.energy},${s.speed},${s.toughness}|${fighter.ability}|${fighter.attunements.join()}|${equipment.join()}|${around.teammates},${around.enemies},${around.enemyDps},${around.hyped}|${support}`;
-	let cached = CACHE.get(key);
-	if (!cached) {
-		if (CACHE.size > 100_000) CACHE.clear();
-		cached = estimateUncached(fighter, equipment, around, support);
-		CACHE.set(key, cached);
+	if (!entry || !sameFighter(entry, fighter)) {
+		entry = { stats: { ...s }, ability: fighter.ability, attunements: fighter.attunements.length, results: new Map() };
+		CACHE.set(fighter, entry);
 	}
-	return cached;
+	const key = `${equipment.join()}|${around.teammates}|${around.hyped}|${support}`;
+	let result = entry.results.get(key);
+	if (!result) {
+		result = estimateUncached(fighter, equipment, around, support);
+		entry.results.set(key, result);
+	}
+	return result;
 }
 
-const CACHE = new Map<string, Estimate>();
-
-/** For scripts that change TUNING. */
-export function clearEstimates(): void {
-	CACHE.clear();
+function sameFighter(entry: { stats: Stats; ability: string; attunements: number }, f: Fighter): boolean {
+	for (const k of STAT_NAMES) if (entry.stats[k] !== f.stats[k]) return false;
+	return entry.ability === f.ability && entry.attunements === f.attunements.length;
 }
+
+let CACHE = new WeakMap<Fighter, { stats: Stats; ability: string; attunements: number; results: Map<string, Estimate> }>();
 
 function estimateUncached(fighter: Fighter, equipment: string[], around: Surroundings, support: boolean): Estimate {
 	const parts = partsOf(fighter, equipment);
@@ -232,13 +235,14 @@ export function teamValue(members: Member[]): number {
 	if (members.length === 0) return 0;
 	const n = members.length;
 	const support = members.map(() => false);
+	const around = { teammates: n - 1, enemies: (n + 1) / 2 };
 	const evaluate = (): number => {
 		// first without hype from teammates, to see how much each one hands out
-		const plain = members.map((m, i) => estimate(m.fighter, m.equipment, { teammates: n - 1, enemies: (n + 1) / 2, enemyDps: 10, hyped: 0 }, support[i]));
-		const enemyDps = plain.reduce((sum, e) => sum + e.output, 0) / n;
+		const plain = members.map((m, i) => estimate(m.fighter, m.equipment, { ...around, hyped: 0 }, support[i]));
+		if (plain.every((e) => e.hype === 0)) return pooledValue(plain);
 		const estimates = members.map((m, i) => {
 			const hyped = 1 - plain.reduce((p, e, j) => (j === i ? p : p * (1 - e.hype)), 1);
-			return estimate(m.fighter, m.equipment, { teammates: n - 1, enemies: (n + 1) / 2, enemyDps, hyped }, support[i]);
+			return estimate(m.fighter, m.equipment, { ...around, hyped }, support[i]);
 		});
 		return pooledValue(estimates);
 	};
