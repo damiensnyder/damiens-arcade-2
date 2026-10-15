@@ -56,11 +56,19 @@ Status effects: frozen (slower, cooldowns at half speed), burning (5 damage a se
 
 Overtime: from 30s into a fight, everyone standing loses half a star of toughness every 5s, so fights can't stall (with healing, say).
 
-To add equipment, add the display entry in `catalog.ts`, its behavior in `sim/behaviors.ts`, and images named after the key in kebab case under `static/mm/equipment/` (worn) and `static/mm/icons/` (shown in cards). If the effect is an attack or stat change, declare it as `attack` or `statMods` and the valuation handles it. For anything else, add `value` hints (extra DPS, or multipliers on DPS or effective HP).
+To add equipment, add the display entry in `catalog.ts`, its behavior in `sim/behaviors.ts`, and images named after the key in kebab case under `static/mm/equipment/` (worn) and `static/mm/icons/` (shown in cards). If the effect is an attack or stat change, declare it as `attack` or `statMods` and the valuation handles it. For anything else, add `value` hints saying what it amounts to: extra damage per second, extra HP, a share of hits blocked, stats gained on average, hype for teammates, or a support action (see `ValueHints` in `sim/behaviors.ts`).
 
 Stats run from 0 to 10. Descriptions count stars, and one star is 2 stat points. The server tracks stats in fractions; clients only get them rounded to whole points (half-stars), so a 4-star fighter might be a 4.2.
 
 Aging lives in `development.ts`: each year every stat changes by a shared random amount plus its own, centered on `averageIncrease(age)`, which rises until the mid-20s, declines in the 30s and faster after 32. Rookies are 19 with stats of random()³ × 7.
+
+## Bots
+
+Bots judge everything by team value (`valuation.ts`). Each fighter counts their output (damage or healing per second, from their best attack and the sim's formulas) times how long they last: their own effective HP plus the HP of the teammates the enemy goes after first. Enemies go after whoever they can do the most about, as the sim's fighters do (more output and less HP draw attention; a frilly skirt deflects it), so protection on a team's best fighter is worth a lot and a soaker's HP shields everyone behind them. Each fighter's (output × time) counts to the power 0.85, and the team's value is the sum. Items that buff teammates do it through teammates' stats; support actions (healing, hyping) replace attacking when that's worth more. A few global constants (`TUNING`, plus how long a fighter typically fights) are fitted against simulated fights.
+
+A purchase is worth how much it raises log(team value), times the seasons it lasts. Each offseason a bot lists what it could buy (re-signs, repairs, the free agents it can see, and the shop to come, each catalog item scaled by its chance of being offered) and buys the best value per dollar until nothing affordable helps. It does the same each day of free agency (bots sign at the end of the day) and in the shop. Lineups are chosen for the whole team: items go out one at a time to whoever they help most, then get moved around until nothing improves. Training goes to whichever stat or attunement raises team value most.
+
+`npx tsx scripts/mm-h2h.ts <a.ts> <b.ts>` plays all-bot leagues with half the teams on each of two bot versions (files exporting `BOT`, or `default`) and reports how often A beats B. `--b-first` lets B sign free agents during the day, before the bots, as people can.
 
 ## Balance
 
