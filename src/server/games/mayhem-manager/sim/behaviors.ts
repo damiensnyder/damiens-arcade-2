@@ -15,6 +15,8 @@ export interface AttackSpec {
 	kind: 'melee' | 'ranged' | 'aoe';
 	/** [unattuned, attuned]. For attacks with `damageAt`, a typical value used for planning. */
 	damage: [number, number];
+	/** Damage each hit does later (like burning), for planning. */
+	lingering?: number;
 	cooldown: [number, number];
 	charges?: [number, number];
 	/** Meters the target is pushed back. */
@@ -30,7 +32,7 @@ export interface AttackSpec {
 
 /** What the valuation knows about the wearer and their fight, for hints that depend on it. */
 export interface ValueContext {
-	/** Hits the wearer's primary attack lands per second. */
+	/** Hits the wearer's primary attack lands per second (0 for a weapon that isn't the one being used). */
 	hitsPerSecond: number;
 	/** Hits the wearer takes before going down, roughly. */
 	hitsTaken: number;
@@ -227,11 +229,14 @@ function freezeValue(seconds: number, ctx: ValueContext): number {
 	return 0.5 * TYPICAL_DPS * Math.min(1, seconds * ctx.hitsPerSecond);
 }
 
-/** Hyping teammates for `seconds` per charge: kept up as much as charging allows, once the first charge is in. */
+/**
+ * Hyping teammates for `seconds` per charge. Fighters recast once the hype wears off (only time
+ * beyond what's left counts), so each cast is followed by charging up again.
+ */
 function hypeAction(seconds: number, ctx: ValueContext): { hype: number; busy: number } {
 	const cycle = ctx.timeToCharge + CHARGED_COOLDOWN;
 	const started = Math.max(1 - (ctx.startDelay + ctx.timeToCharge) / TYPICAL_FIGHT_SECONDS, 0);
-	return { hype: Math.min(1, seconds / cycle) * started, busy: Math.min(1, cycle / seconds) };
+	return { hype: (seconds / (seconds + cycle)) * started, busy: cycle / (seconds + cycle) };
 }
 
 export const FISTS: Behavior = {
@@ -341,12 +346,13 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			cooldown: [CHARGED_COOLDOWN, CHARGED_COOLDOWN],
 			charges: [3, 3],
 			knockback: 1,
-			projectile: '/mm/projectiles/fireball.png'
+			projectile: '/mm/projectiles/fireball.png',
+			// 5s of burning
+			lingering: 25
 		},
 		onHitDealt: (item, target, _damage, source) => {
 			if (source === item) burn(target, item.owner, 5);
-		},
-		value: { dps: (_attuned, ctx) => 25 * (1 + 0.5 * Math.max(ctx.enemies - 1, 0)) * ctx.hitsPerSecond }
+		}
 	},
 	zapHelmet: {
 		passiveDanger: (item) => (item.attuned ? 20 : 15) / 3,

@@ -1,7 +1,9 @@
 // Pits two bot versions against each other in all-bot leagues: half the teams use each. Prints how
 // often A beats B when they meet (regular season and playoffs) and each side's share of titles.
 //
-//   npx tsx scripts/mm-h2h.ts <a.ts> <b.ts> [--leagues 40] [--seasons 10] [--teams 8] [--from 2] [--workers 4]
+//   npx tsx scripts/mm-h2h.ts <a.ts> <b.ts> [--leagues 40] [--seasons 10] [--teams 8] [--from 2] [--workers 4] [--b-first]
+//
+// With --b-first, B's teams sign free agents during the day, before the bots, as people can.
 //
 // Each file exports `BOT` (a BotPolicy); "default" means src/server/games/mayhem-manager/bot.ts.
 // Seasons before --from are skipped, since the first is unusual.
@@ -24,6 +26,7 @@ const seasons = flag('seasons', 10);
 const teamCount = flag('teams', 8);
 const from = flag('from', 2);
 const workers = flag('workers', 4);
+const bFirst = args.includes('--b-first');
 
 interface Tally {
 	aWins: number;
@@ -55,6 +58,13 @@ async function playLeague(a: BotPolicy, b: BotPolicy, tally: Tally): Promise<voi
 	const champions = new Set<number>();
 	const started = Date.now();
 	for (let step = 0; step < seasons * 30 && s().season <= seasons; step++) {
+		const phase = s().phase;
+		if (bFirst && phase.kind === 'freeAgency') {
+			const sign = (league as unknown as { sign: (team: unknown, id: number, byBot: boolean) => boolean }).sign.bind(league);
+			for (const team of s().teams.filter((t) => !sideA.has(t.id))) {
+				for (const agent of b.chooseSignings(team, s().freeAgents, phase.day, 3)) sign(team, agent.fighter.id, true);
+			}
+		}
 		league.handleAction(1, { type: 'forceReady' }, true);
 		const st = s();
 		for (const m of st.matches) {
@@ -109,5 +119,5 @@ if (process.env.MM_H2H_WORKER) {
 	const p = t.aWins / t.meetings;
 	const mean = t.shares.reduce((a, b) => a + b, 0) / t.shares.length;
 	const se = Math.sqrt(t.shares.reduce((a, b) => a + (b - mean) ** 2, 0) / (t.shares.length - 1) / t.shares.length);
-	console.log(`${pathA} vs ${pathB}: A wins ${(100 * p).toFixed(1)}% ± ${(100 * se).toFixed(1)} of ${t.meetings} meetings, ${t.aTitles}/${t.titles} titles · ${(t.ms / leagues / 1000).toFixed(1)}s per league`);
+	console.log(`${pathA} vs ${pathB}${bFirst ? ' (B signs first)' : ''}: A wins ${(100 * p).toFixed(1)}% ± ${(100 * se).toFixed(1)} of ${t.meetings} meetings, ${t.aTitles}/${t.titles} titles · ${(t.ms / leagues / 1000).toFixed(1)}s per league`);
 }

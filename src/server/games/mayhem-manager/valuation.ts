@@ -116,6 +116,11 @@ function sameFighter(entry: { stats: Stats; ability: string; attunements: number
 
 let CACHE = new WeakMap<Fighter, { stats: Stats; ability: string; attunements: number; results: Map<string, Estimate> }>();
 
+/** For scripts that change TUNING. */
+export function clearEstimates(): void {
+	CACHE = new WeakMap();
+}
+
 function estimateUncached(fighter: Fighter, equipment: string[], around: Surroundings, support: boolean): Estimate {
 	const parts = partsOf(fighter, equipment);
 	const base = effectiveStats(fighter, equipment);
@@ -141,6 +146,7 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 		let dps = 0;
 		let hitsPerSecond = 0;
 		let ranged = false;
+		let primary: Part | null = null;
 		for (const part of parts) {
 			const spec = part.behavior.attack;
 			if (!spec) continue;
@@ -149,11 +155,13 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 			const strength = Math.max(0.5 + 0.1 * s[spec.scalesWith ?? 'strength'], 0.25);
 			const hitChance = Math.max(0, Math.min(0.25 + 0.05 * s.accuracy, 1));
 			const share = uptime(Math.max(INITIAL_COOLDOWN, spec.kind === 'melee' ? approach : 0) + charges * timeToCharge);
-			const perUse = spec.kind === 'melee' ? damage * (spec.fixed ? 1 : strength) : spec.kind === 'ranged' ? damage * hitChance : damage * (1 + TUNING.aoeSpread * Math.max(around.enemies - 1, 0));
+			const hit = damage + (spec.lingering ?? 0);
+			const perUse = spec.kind === 'melee' ? hit * (spec.fixed ? 1 : strength) : spec.kind === 'ranged' ? hit * hitChance : hit * (1 + TUNING.aoeSpread * Math.max(around.enemies - 1, 0));
 			if ((perUse * share) / cycle > dps) {
 				dps = (perUse * share) / cycle;
 				hitsPerSecond = ((spec.kind === 'ranged' ? hitChance : 1) * share) / cycle;
 				ranged = spec.kind !== 'melee';
+				primary = part;
 			}
 		}
 
@@ -166,11 +174,14 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 		let healing = 0;
 		let busy = 0;
 		let canSupport = false;
-		Object.assign(ctx, { hitsPerSecond, timeToCharge });
+		const actions: { healing?: number; hype?: number; busy: number }[] = [];
+		Object.assign(ctx, { timeToCharge });
 		for (const part of parts) {
 			const v = part.behavior.value;
 			weight *= part.behavior.targetWeight ?? 1;
 			if (!v) continue;
+			// a weapon's on-hit effects only count if it's the one being used
+			ctx.hitsPerSecond = part.behavior.attack && part !== primary ? 0 : hitsPerSecond;
 			dps += v.dps?.(part.attuned, ctx) ?? 0;
 			hp += (v.hp?.(part.attuned, ctx) ?? 0) / damageTaken;
 			blocked = 1 - (1 - blocked) * (1 - (v.blocked?.(part.attuned) ?? 0));
@@ -181,12 +192,15 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 			const action = v.action?.(part.attuned, ctx);
 			if (action) {
 				canSupport = true;
-				if (support) {
-					healing += action.healing ?? 0;
-					hype = 1 - (1 - hype) * (1 - (action.hype ?? 0));
-					busy = Math.max(busy, action.busy);
-				}
+				if (support) actions.push(action);
 			}
+		}
+		// support actions share the fighter's time
+		const time = Math.max(1, actions.reduce((sum, a) => sum + a.busy, 0));
+		for (const a of actions) {
+			healing += (a.healing ?? 0) / time;
+			hype = 1 - (1 - hype) * (1 - (a.hype ?? 0) / time);
+			busy += a.busy / time;
 		}
 		hp /= 1 - blocked;
 		if (ranged) hp *= TUNING.rangedKiting;
