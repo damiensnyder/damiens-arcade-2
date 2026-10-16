@@ -297,7 +297,7 @@ export default class MayhemManager extends GameLogicHandler {
 			case 'playoffs': {
 				const current = sanitizeLineup(team.fighters, team.equipment, team.lineup);
 				const hasPicks = Object.values(current).some((ids) => ids.length > 0);
-				team.lineup = hasPicks && team.controller !== 'bot' ? current : this.botFor(team.id).chooseLineup(team.fighters, team.equipment);
+				team.lineup = hasPicks && team.controller !== 'bot' ? current : this.botFor(team.id).chooseLineup(team.fighters, team.equipment, team.money);
 				break;
 			}
 		}

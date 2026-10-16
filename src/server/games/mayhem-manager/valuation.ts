@@ -76,16 +76,24 @@ export interface Estimate {
 	canSupport: boolean;
 }
 
+/** The most damage a hit can usefully do (before toughness): a fighter has at most 100 HP. */
+const MAX_HIT = 100;
+
+/** Money a team typically has during its fights, for callers that don't say: teams keep little. */
+export const TYPICAL_MONEY = 6;
+
 /** What the team around a fighter looks like, for effects that depend on it. */
 export interface Surroundings {
 	teammates: number;
+	/** The team's money during its fights. */
+	money: number;
 	/** Enemies standing, on average over the fight. */
 	enemies: number;
 	/** Share of the fight this fighter is hyped by teammates. */
 	hyped: number;
 }
 
-const ALONE: Surroundings = { teammates: 0, enemies: 1, hyped: 0 };
+const ALONE: Surroundings = { teammates: 0, money: TYPICAL_MONEY, enemies: 1, hyped: 0 };
 
 /**
  * One fighter wearing the given equipment keys. With `support`, they use their support action
@@ -100,7 +108,9 @@ export function estimate(fighter: Fighter, equipment: string[], around: Surround
 		entry = { stats: { ...s }, ability: fighter.ability, attunements: fighter.attunements.length, results: new Map() };
 		CACHE.set(fighter, entry);
 	}
-	const key = `${equipment.join()}|${around.teammates}|${around.hyped}|${support}`;
+	// money only matters to a few items, so it's only part of the key for loadouts that have one
+	const money = equipment.some((k) => EQUIPMENT_BEHAVIORS[k]?.attack?.planDamage) ? around.money : '';
+	const key = `${equipment.join()}|${around.teammates}|${around.hyped}|${support}|${money}`;
 	let result = entry.results.get(key);
 	if (!result) {
 		result = estimateUncached(fighter, equipment, around, support);
@@ -151,12 +161,15 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 		for (const part of parts) {
 			const spec = part.behavior.attack;
 			if (!spec) continue;
-			const { damage, cooldown, charges } = attackStats(spec, part.attuned);
+			const stats = attackStats(spec, part.attuned);
+			const { cooldown, charges } = stats;
+			const damage = spec.planDamage?.(part.attuned, ctx) ?? stats.damage;
 			const cycle = Math.max(cooldown - cooldownReduction, TICK_LENGTH) + charges * timeToCharge;
 			const strength = Math.max(0.5 + 0.1 * s[spec.scalesWith ?? 'strength'], 0.25);
 			const hitChance = Math.max(0, Math.min(0.25 + 0.05 * s.accuracy, 1));
 			const share = uptime(Math.max(INITIAL_COOLDOWN, spec.kind === 'melee' ? approach : 0) + charges * timeToCharge);
-			const hit = (spec.kind === 'melee' && !spec.fixed ? damage * strength : damage) + (spec.lingering ?? 0);
+			// damage past knocking someone out is wasted
+			const hit = Math.min(spec.kind === 'melee' && !spec.fixed ? damage * strength : damage, MAX_HIT) + (spec.lingering ?? 0);
 			const perUse = spec.kind === 'melee' ? hit : spec.kind === 'ranged' ? hit * hitChance : hit * (1 + TUNING.aoeSpread * Math.max(around.enemies - 1, 0));
 			const rate = ((spec.kind === 'ranged' ? hitChance : 1) * share) / cycle;
 			// attacks the sim picks for their side effects (like putting the target to sleep) are picked
@@ -248,14 +261,14 @@ function pooledValue(estimates: Estimate[]): number {
 }
 
 /**
- * The team formula (see the top of this file) for these fighters and loadouts. Fighters with a
- * support action use it if that makes the team stronger.
+ * The team formula (see the top of this file) for these fighters and loadouts, with this much
+ * money during its fights. Fighters with a support action use it if that makes the team stronger.
  */
-export function teamValue(members: Member[]): number {
+export function teamValue(members: Member[], money = TYPICAL_MONEY): number {
 	if (members.length === 0) return 0;
 	const n = members.length;
 	const support = members.map(() => false);
-	const around = { teammates: n - 1, enemies: (n + 1) / 2 };
+	const around = { teammates: n - 1, money, enemies: (n + 1) / 2 };
 	const evaluate = (): number => {
 		// first without hype from teammates, to see how much each one hands out
 		const plain = members.map((m, i) => estimate(m.fighter, m.equipment, { ...around, hyped: 0 }, support[i]));

@@ -4,20 +4,28 @@
 // they last with the gear they'd get, added up. A purchase is worth how much it raises
 // log(team value), which is about how much better the team's odds get, times the seasons it
 // lasts. Bots buy whatever is worth the most per dollar until the money runs out or nothing helps.
+// Teams are valued with the money they'd have left, which matters for gear like the Money Sword.
 
 import { FA_CONTRACT_YEARS, NEW_EQUIPMENT_YEARS, SHOP_SIZE, REPAIR_YEARS, RESIGN_CONTRACT_YEARS, canWearTogether, freeAgentPrices, isMaxed } from '../../../lib/games/mayhem-manager/rules.js';
 import { EQUIPMENT, EQUIPMENT_KEYS } from '../../../lib/games/mayhem-manager/catalog.js';
 import { STAT_NAMES, type Equipment, type Fighter, type FreeAgent, type TrainingPlan } from '../../../lib/games/mayhem-manager/types.js';
 import type { TeamState } from './state.js';
-import { projectedFighter, teamValue } from './valuation.js';
+import { EQUIPMENT_BEHAVIORS } from './sim/behaviors.js';
+import { TYPICAL_MONEY, projectedFighter, teamValue } from './valuation.js';
 
 type Gear = { id: number; key: string };
 
 /** Who wears what: one list of gear per fighter. */
 type Worn = Gear[][];
 
-function logValue(fighters: Fighter[], worn: Worn): number {
-	return Math.log(Math.max(teamValue(fighters.map((fighter, i) => ({ fighter, equipment: worn[i].map((g) => g.key) }))), 1e-9));
+/** log(team value), with `money` left for the team's fights. */
+function logValue(fighters: Fighter[], worn: Worn, money: number): number {
+	return Math.log(Math.max(teamValue(fighters.map((fighter, i) => ({ fighter, equipment: worn[i].map((g) => g.key) })), money), 1e-9));
+}
+
+/** Whether any of this gear is worth more or less depending on the team's money. */
+function usesMoney(gear: Gear[]): boolean {
+	return gear.some((g) => EQUIPMENT_BEHAVIORS[g.key]?.attack?.planDamage);
 }
 
 /** `worn` with `item` put on fighter `i`, taking off whatever it doesn't fit with. */
@@ -28,11 +36,11 @@ function puttingOn(worn: Worn, i: number, item: Gear): Worn {
 }
 
 /** The best place for one more item, without rearranging anything else: [log value, lineup]. */
-function placeItem(fighters: Fighter[], worn: Worn, item: Gear, current = logValue(fighters, worn)): [number, Worn] {
+function placeItem(fighters: Fighter[], worn: Worn, item: Gear, money: number, current = logValue(fighters, worn, money)): [number, Worn] {
 	let best: [number, Worn] = [current, worn];
 	for (let i = 0; i < fighters.length; i++) {
 		const option = puttingOn(worn, i, item);
-		const value = logValue(fighters, option);
+		const value = logValue(fighters, option, money);
 		if (value > best[0]) best = [value, option];
 	}
 	return best;
@@ -42,14 +50,14 @@ function placeItem(fighters: Fighter[], worn: Worn, item: Gear, current = logVal
  * Hands out equipment to make the team as strong as possible: gives out items one at a time, each
  * to whoever it helps most, then tries moving each item to someone else until nothing improves.
  */
-function arrange(fighters: Fighter[], gear: Gear[], start?: Worn): Worn {
+function arrange(fighters: Fighter[], gear: Gear[], money: number, start?: Worn): Worn {
 	let worn: Worn = start ?? fighters.map(() => []);
-	let value = logValue(fighters, worn);
-	for (const item of gear) if (!worn.some((w) => w.includes(item))) [value, worn] = placeItem(fighters, worn, item, value);
+	let value = logValue(fighters, worn, money);
+	for (const item of gear) if (!worn.some((w) => w.includes(item))) [value, worn] = placeItem(fighters, worn, item, money, value);
 	for (let pass = 0; pass < 3; pass++) {
 		let improved = false;
 		for (const item of gear) {
-			const [v, w] = placeItem(fighters, worn, item, value);
+			const [v, w] = placeItem(fighters, worn, item, money, value);
 			if (v > value + 1e-9) {
 				[value, worn] = [v, w];
 				improved = true;
@@ -60,8 +68,8 @@ function arrange(fighters: Fighter[], gear: Gear[], start?: Worn): Worn {
 	return worn;
 }
 
-export function assignLineup(fighters: Fighter[], gear: Gear[]): Record<number, number[]> {
-	const worn = arrange(fighters, gear);
+export function assignLineup(fighters: Fighter[], gear: Gear[], money = TYPICAL_MONEY): Record<number, number[]> {
+	const worn = arrange(fighters, gear, money);
 	return Object.fromEntries(fighters.map((f, i) => [f.id, worn[i].map((g) => g.id)]));
 }
 
@@ -70,20 +78,21 @@ interface Plan {
 	fighters: Fighter[];
 	gear: Gear[];
 	worn: Worn;
+	/** With the money the plan leaves. */
 	value: number;
 }
 
-function planFor(fighters: Fighter[], gear: Gear[]): Plan {
-	const worn = arrange(fighters, gear);
-	return { fighters, gear, worn, value: logValue(fighters, worn) };
+function planFor(fighters: Fighter[], gear: Gear[], money: number): Plan {
+	const worn = arrange(fighters, gear, money);
+	return { fighters, gear, worn, value: logValue(fighters, worn, money) };
 }
 
 /** log(team value) with a new fighter: they start bare and can take any one item from a teammate. */
-function withFighter(plan: Plan, f: Fighter): number {
+function withFighter(plan: Plan, f: Fighter, money: number): number {
 	const fighters = [...plan.fighters, f];
 	const worn = [...plan.worn, []];
-	let best = logValue(fighters, worn);
-	for (const item of plan.gear) best = Math.max(best, logValue(fighters, puttingOn(worn, fighters.length - 1, item)));
+	let best = logValue(fighters, worn, money);
+	for (const item of plan.gear) best = Math.max(best, logValue(fighters, puttingOn(worn, fighters.length - 1, item), money));
 	return best;
 }
 
@@ -111,16 +120,18 @@ const SHORTLIST = 6;
 function spend(options: Option[], fighters: Fighter[], gear: Gear[], budget: number): Option[] {
 	const bought: Option[] = [];
 	const remaining = options.slice();
-	let plan = planFor(fighters, gear);
+	let plan = planFor(fighters, gear, budget);
 	// fighters count as they're expected to develop over the contract
 	const projected = new Map(options.filter((o) => o.fighter).map((o) => [o, projectedFighter(o.fighter!, o.years)]));
-	const alone = new Map([...projected].map(([o, f]) => [o, logValue([f], [[]]) - Math.log(o.price)]));
+	const alone = new Map([...projected].map(([o, f]) => [o, logValue([f], [[]], budget) - Math.log(o.price)]));
 	// what each option would add to the current plan; only recomputed once the plan changes
 	let gains = new Map<Option, number>();
 	const gainOf = (o: Option): number => {
 		let gain = gains.get(o);
 		if (gain === undefined) {
-			const after = o.fighter ? withFighter(plan, projected.get(o)!) : placeItem(plan.fighters, plan.worn, o.gear!, plan.value)[0];
+			// valued with the money left after paying for it
+			const left = budget - o.price;
+			const after = o.fighter ? withFighter(plan, projected.get(o)!, left) : placeItem(plan.fighters, plan.worn, o.gear!, left)[0];
 			gain = (after - plan.value) * o.years * (o.chance ?? 1);
 			gains.set(o, gain);
 		}
@@ -145,9 +156,11 @@ function spend(options: Option[], fighters: Fighter[], gear: Gear[], budget: num
 		bought.push(best);
 		remaining.splice(remaining.indexOf(best), 1);
 		budget -= best.price;
-		if (best.fighter) plan = planFor([...plan.fighters, best.fighter], plan.gear);
-		else if (!best.chance) plan = planFor(plan.fighters, [...plan.gear, best.gear!]);
-		if (!best.chance) gains = new Map();
+		// a share of a shop item doesn't change the plan, except for gear that depends on the money left
+		const recount = !best.chance || usesMoney(plan.gear);
+		if (best.fighter) plan = planFor([...plan.fighters, best.fighter], plan.gear, budget);
+		else if (recount) plan = planFor(plan.fighters, best.chance ? plan.gear : [...plan.gear, best.gear!], budget);
+		if (recount) gains = new Map();
 	}
 }
 
@@ -221,10 +234,10 @@ export function chooseShopping(team: TeamState): void {
  * The stat or attunement that most raises team value, given the gear this fighter will likely wear.
  * `owned` is all the team's gear, for fighters who won't use gear until they're attuned to it.
  */
-export function chooseTrainingPlan(f: Fighter, keys: string[], owned: string[] = keys, team: Fighter[] = [f], worn: string[][] = [keys]): TrainingPlan {
+export function chooseTrainingPlan(f: Fighter, keys: string[], owned: string[] = keys, team: Fighter[] = [f], worn: string[][] = [keys], money = TYPICAL_MONEY): TrainingPlan {
 	const at = Math.max(team.indexOf(f), 0);
 	const score = (g: Fighter, k: string[]) =>
-		Math.log(Math.max(teamValue(team.map((t, i) => (i === at ? { fighter: g, equipment: k } : { fighter: t, equipment: worn[i] }))), 1e-9));
+		Math.log(Math.max(teamValue(team.map((t, i) => (i === at ? { fighter: g, equipment: k } : { fighter: t, equipment: worn[i] })), money), 1e-9));
 	const base = score(f, keys);
 	let best: TrainingPlan = { kind: 'stat', stat: 'toughness' };
 	let bestGain = -Infinity;
@@ -252,14 +265,14 @@ export function chooseTrainingPlan(f: Fighter, keys: string[], owned: string[] =
 /** Fills in training plans for fighters who don't have one, based on the lineup they'd get. */
 export function chooseTraining(team: TeamState): void {
 	const gear: Gear[] = [...team.equipment, ...team.shop.filter((s) => s.bought).map((s) => ({ id: s.id, key: s.key }))];
-	const worn = arrange(team.fighters, gear).map((w) => w.map((g) => g.key));
+	const worn = arrange(team.fighters, gear, team.money).map((w) => w.map((g) => g.key));
 	team.fighters.forEach((f, i) => {
-		if (!team.training[f.id]) team.training[f.id] = chooseTrainingPlan(f, worn[i], gear.map((g) => g.key), team.fighters, worn);
+		if (!team.training[f.id]) team.training[f.id] = chooseTrainingPlan(f, worn[i], gear.map((g) => g.key), team.fighters, worn, team.money);
 	});
 }
 
-export function chooseLineup(fighters: Fighter[], equipment: Equipment[]): Record<number, number[]> {
-	return assignLineup(fighters, equipment);
+export function chooseLineup(fighters: Fighter[], equipment: Equipment[], money = TYPICAL_MONEY): Record<number, number[]> {
+	return assignLineup(fighters, equipment, money);
 }
 
 export interface BotPolicy {
@@ -267,7 +280,7 @@ export interface BotPolicy {
 	chooseSignings: (team: TeamState, agents: FreeAgent[], day: number, lastDay: number) => FreeAgent[];
 	chooseShopping: (team: TeamState) => void;
 	chooseTraining: (team: TeamState) => void;
-	chooseLineup: (fighters: Fighter[], equipment: Equipment[]) => Record<number, number[]>;
+	chooseLineup: (fighters: Fighter[], equipment: Equipment[], money?: number) => Record<number, number[]>;
 }
 
 export const BOT: BotPolicy = { decideOffseason, chooseSignings, chooseShopping, chooseTraining, chooseLineup };

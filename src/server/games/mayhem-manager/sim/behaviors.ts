@@ -30,6 +30,8 @@ export interface AttackSpec {
 	fixed?: boolean;
 	/** Works out the damage when the attack lands, for attacks that depend on the situation. */
 	damageAt?: (item: BattleItem, target: BattleFighter) => number;
+	/** For the valuation, damage worked out from what it knows (like the team's money), in place of `damage`. */
+	planDamage?: (attuned: boolean, ctx: ValueContext) => number;
 }
 
 /** What the valuation knows about the wearer and their fight, for hints that depend on it. */
@@ -45,6 +47,8 @@ export interface ValueContext {
 	enemies: number;
 	/** Immune to negative status effects. */
 	immune: boolean;
+	/** The team's money during its fights. */
+	money: number;
 }
 
 /**
@@ -433,12 +437,12 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	moneySword: {
 		attack: {
 			kind: 'melee',
-			// typical, for planning: bots keep about $6 into the season, so it mostly whiffs (it averages
-			// about 6 a hit, or 8 attuned); a team that banks money gets far more out of it
+			// typical: teams keep about $6 into the season, so it mostly whiffs (about 6 a hit, or 8 attuned)
 			damage: [6, 8],
 			cooldown: [3, 3],
 			knockback: 2,
-			damageAt: (item) => 20 * Math.floor(item.owner.teamMoney() / (item.attuned ? 10 : 12))
+			damageAt: (item) => moneySwordDamage(item.attuned, item.owner.teamMoney()),
+			planDamage: (attuned, ctx) => moneySwordDamage(attuned, ctx.money)
 		}
 	},
 	halo: {
@@ -538,6 +542,10 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		value: { action: (attuned, ctx) => hypeAction(attuned ? 10 : 8, ctx) }
 	}
 };
+
+function moneySwordDamage(attuned: boolean, money: number): number {
+	return 20 * Math.floor(Math.max(money, 0) / (attuned ? 10 : 12));
+}
 
 /** The standing teammate (or the fighter themself) it's worth most to heal. */
 function bestHeal(f: BattleFighter, amount: number): { target: BattleFighter | null; value: number } {
