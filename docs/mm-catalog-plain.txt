@@ -29,9 +29,13 @@ Shiv
 hand, $14
 Melee. Deals 16 damage. Cooldown 2s [attuned: 1.5s].
 
+Torch
+hand, $13
+Melee. Deals 12 [attuned: 20] damage. Cooldown 2.5s. On hit: Set the target on fire.
+
 The Money Sword
 hand, $12
-Deals 10 damage for every $8 [attuned: $6] your team has. Cooldown 3s.
+Melee. Deals 20 damage for every $12 [attuned: $10] your team has. Cooldown 3s.
 
 Steel-Toed Boots
 feet, $10
@@ -41,12 +45,20 @@ Melee. Deals 20 [attuned: 25] damage. Cooldown 3.5s. +1 toughness.
 
 Wand of the Great Pyromaniac
 hand, $40
-Ranged. Deals 50 [attuned: 60] damage to all enemies and applies 5s of burning. Requires 3 charges.
+Ranged. Deals 50 [attuned: 60] damage to all enemies and sets them on fire. Requires 3 charges.
 the Great Pyromaniac might have been a little *too* great
 
 Laser Blaster
 hand, $36
 Ranged. Deals 40 [attuned: 50] damage. Cooldown 2s.
+
+Tranquilizer Gun
+hand, $29
+Ranged. Deals 10 damage. Cooldown 4s. On hit: Target falls asleep.
+
+Flare Gun
+hand, $15
+Ranged. Deals 20 [attuned: 30] damage. Cooldown 3s. On hit: Set all enemies within 10m of the target on fire.
 
 Bow
 two-handed, $12
@@ -57,6 +69,10 @@ head, $9
 Ranged. Deals 12 damage. Cooldown 1.5s. On hit dealt: Freeze the target for 1s [attuned: 2s].
 
 ## Single-use
+
+Halo
+head, $37
+When a teammate is KO'd, revive them at 50% HP. Remove Halo.
 
 Flamingo Floaty
 legs, $16
@@ -110,10 +126,6 @@ it's just so aerodynamic
 
 ## Passive effects
 
-Halo
-head, $26
-When a teammate is KO'd, revive them at 50% HP. Remove Halo.
-
 Shield
 hand, $25
 50% chance to block hits when facing the attacker.
@@ -130,6 +142,7 @@ you wouldn't hit someone in a frilly little skirt, would you?
 Knife Shoes
 feet, $18
 Whenever an opponent enters melee range, deal 5 [attuned: 6] damage to them.
+didn't expect to get hit from down there, did ya?
 
 Fairy Hat
 head, $17
@@ -153,18 +166,15 @@ On hit dealt: Gain +1 [attuned: +1.5] strength.
 the rhinoceros beetle is the strongest creature on earth
 
 Eyepatch
-head, $9
+head, $8
 On KO: Loot $2 [attuned: $4] from the opponent.
+shouldn't have brought ye wallet into the arena!
 
 Censored Bar
 legs, $4
 Wearer is immune to negative status effects.
 
 # Abilities
-
-Pep Talk, $21
-Teammates start each fight hyped for 5s.
-delivers quite the pep talk
 
 Powerful Fists, $17
 Fists deal double damage.
@@ -173,8 +183,15 @@ Oomph, $16
 On hit dealt: Target loses 5 extra HP.
 just has a little more "oomph"
 
+Bloodlust, $10
+On hit dealt: Gain 0.5 strength.
+
 Enrage, $13
 On hit taken: Gain 1 strength.
+
+Pep Talk, $6
+Teammates start each fight hyped for 3s.
+delivers quite the pep talk
 
 Brand Ambassador, $10
 On KO: Team gains $3.
@@ -219,6 +236,18 @@ was held back a couple grades as well
 Picky, -$10
 Refuses to use unattuned equipment.
 
+Sleepyhead, -$10
+Asleep for the first 5s of each fight.
+oh shoot, we're fighting already?
+
 Coward, -$13
 When hit: Becomes scared for 3s.
 don't act like you're any better
+
+# Effect explanations
+
+on fire = takes 5 damage per second for 5s. (does not stack.)
+asleep = can't move or use actions until taking damage.
+taunted = must attack the taunting enemy.
+scared = runs away from the scaring enemy, doesn't take any actions.
+enemies much less likely to attack = enemies will target teammates without that ability first.

@@ -41,7 +41,12 @@ function equipment(
 }
 
 /** Equipment without its own art yet, and whose images it borrows meanwhile. */
-const PLACEHOLDER_ART: Record<string, string> = { moneySword: 'diamondSword' };
+const PLACEHOLDER_ART: Record<string, string> = {
+	moneySword: 'diamondSword',
+	torch: 'wandOfFlames',
+	tranquilizerGun: 'laserBlaster',
+	flareGun: 'laserBlaster'
+};
 
 /** Image file names match the catalog key in kebab case. */
 export function equipmentImg(key: string): string {
@@ -64,14 +69,18 @@ const EQUIPMENT_LIST: EquipmentInfo[] = [
 	equipment('theRatioInator', 'The Ratio-Inator', ['hand'], 20, "Melee. All hits reduce the target's HP by 30% [attuned: 40%]. Cooldown 2.5s.", 'hold this.'),
 	equipment('headbuttersDelight', "Headbutter's Delight", ['head'], 16, 'Melee. Deals 20 [attuned: 25] damage. Damage scales with toughness instead of strength. Cooldown 3s.'),
 	equipment('shiv', 'Shiv', ['hand'], 14, 'Melee. Deals 16 damage. Cooldown 2s [attuned: 1.5s].'),
-	equipment('moneySword', 'The Money Sword', ['hand'], 12, 'Deals 10 damage for every $8 [attuned: $6] your team has. Cooldown 3s.'),
+	equipment('torch', 'Torch', ['hand'], 13, 'Melee. Deals 12 [attuned: 20] damage. Cooldown 2.5s. On hit: Set the target on fire.'),
+	equipment('moneySword', 'The Money Sword', ['hand'], 12, 'Melee. Deals 20 damage for every $12 [attuned: $10] your team has. Cooldown 3s.'),
 	equipment('steelToedBoots', 'Steel-Toed Boots', ['feet'], 10, 'Melee. Deals 20 [attuned: 25] damage. Cooldown 3.5s. +1 toughness.'),
 	// ranged weapons
-	equipment('wandOfFlames', 'Wand of the Great Pyromaniac', ['hand'], 40, 'Ranged. Deals 50 [attuned: 60] damage to all enemies and applies 5s of burning. Requires 3 charges.', 'the Great Pyromaniac might have been a little *too* great'),
+	equipment('wandOfFlames', 'Wand of the Great Pyromaniac', ['hand'], 40, 'Ranged. Deals 50 [attuned: 60] damage to all enemies and sets them on fire. Requires 3 charges.', 'the Great Pyromaniac might have been a little *too* great'),
 	equipment('laserBlaster', 'Laser Blaster', ['hand'], 36, 'Ranged. Deals 40 [attuned: 50] damage. Cooldown 2s.'),
+	equipment('tranquilizerGun', 'Tranquilizer Gun', ['hand'], 29, 'Ranged. Deals 10 damage. Cooldown 4s. On hit: Target falls asleep.'),
+	equipment('flareGun', 'Flare Gun', ['hand'], 15, 'Ranged. Deals 20 [attuned: 30] damage. Cooldown 3s. On hit: Set all enemies within 10m of the target on fire.'),
 	equipment('bow', 'Bow', ['hand', 'hand'], 12, 'Ranged. Deals 50 [attuned: 65] damage. Cooldown 5s.'),
 	equipment('snowmanHead', 'Snowman Head', ['head'], 9, 'Ranged. Deals 12 damage. Cooldown 1.5s. On hit dealt: Freeze the target for 1s [attuned: 2s].'),
 	// single-use
+	equipment('halo', 'Halo', ['head'], 37, "When a teammate is KO'd, revive them at 50% HP. Remove Halo."),
 	equipment('flamingoFloaty', 'Flamingo Floaty', ['legs'], 16, 'On hit taken: Prevent all damage. Remove Flamingo Floaty.', '*pop!*'),
 	equipment('cornDog', 'Corn Dog', ['hand'], 12, 'Single-use. Heals 40 HP.', 'surprisingly nutritious'),
 	// other actions
@@ -85,17 +94,16 @@ const EQUIPMENT_LIST: EquipmentInfo[] = [
 	equipment('noveltyArrowHat', 'Novelty Arrow Hat', ['head'], 6, '+1.5 accuracy'),
 	equipment('speedo', 'Speedo', ['legs'], 4, '+1 speed', "it's just so aerodynamic"),
 	// passive effects
-	equipment('halo', 'Halo', ['head'], 26, "When a teammate is KO'd, revive them at 50% HP. Remove Halo."),
 	equipment('shield', 'Shield', ['hand'], 25, '50% chance to block hits when facing the attacker.'),
 	equipment('zapHelmet', 'Zap Helmet', ['head'], 25, 'Every 3s, deals 15 [attuned: 20] damage to the nearest enemy fighter.'),
 	equipment('frillySkirt', 'Frilly Skirt', ['legs'], 24, 'Makes opponents much less likely to target the wearer.', "you wouldn't hit someone in a frilly little skirt, would you?"),
-	equipment('knifeShoes', 'Knife Shoes', ['feet'], 18, 'Whenever an opponent enters melee range, deal 5 [attuned: 6] damage to them.'),
+	equipment('knifeShoes', 'Knife Shoes', ['feet'], 18, 'Whenever an opponent enters melee range, deal 5 [attuned: 6] damage to them.', "didn't expect to get hit from down there, did ya?"),
 	equipment('fairyHat', 'Fairy Hat', ['head'], 17, 'On hit dealt: Freeze the target for 2s [attuned: 3s].'),
 	equipment('jellyhat', 'Jellyhat', ['head'], 16, 'On melee hit taken: Deal 10 [attuned: 15] damage to the attacker.'),
 	equipment('chainsawHeadband', 'Chainsaw Headband', ['head'], 15, 'Every second, deal 4 [attuned: 5] damage to all enemies in melee range.'),
 	equipment('shrapnel', 'Shrapnel', ['head'], 13, "When KO'd: Deal 40 damage to ALL fighters within 10m."),
 	equipment('rhinocerosBeetleHorn', 'Rhinoceros Beetle Horn', ['head'], 10, 'On hit dealt: Gain +1 [attuned: +1.5] strength.', 'the rhinoceros beetle is the strongest creature on earth'),
-	equipment('eyepatch', 'Eyepatch', ['head'], 9, 'On KO: Loot $2 [attuned: $4] from the opponent.'),
+	equipment('eyepatch', 'Eyepatch', ['head'], 8, 'On KO: Loot $2 [attuned: $4] from the opponent.', "shouldn't have brought ye wallet into the arena!"),
 	equipment('censoredBar', 'Censored Bar', ['legs'], 4, 'Wearer is immune to negative status effects.')
 ];
 
@@ -112,10 +120,11 @@ const ability = (key: string, name: string, price: number, description: string, 
 
 const ABILITY_LIST: AbilityInfo[] = [
 	ability('noAbilities', '', 0, ''),
-	ability('pepTalk', 'Pep Talk', 21, 'Teammates start each fight hyped for 5s.', 'delivers quite the pep talk'),
 	ability('powerfulFists', 'Powerful Fists', 17, 'Fists deal double damage.'),
 	ability('extraDamageOnHit', 'Oomph', 16, 'On hit dealt: Target loses 5 extra HP.', 'just has a little more "oomph"'),
+	ability('bloodlust', 'Bloodlust', 10, 'On hit dealt: Gain 0.5 strength.'),
 	ability('gainStrengthOnHitTaken', 'Enrage', 13, 'On hit taken: Gain 1 strength.'),
+	ability('pepTalk', 'Pep Talk', 6, 'Teammates start each fight hyped for 3s.', 'delivers quite the pep talk'),
 	ability('moneyOnKo', 'Brand Ambassador', 10, 'On KO: Team gains $3.', 'it\'s called being a "brand ambassador"'),
 	ability('lastStand', 'Lone Wolf', 8, '+3 to all stats when all other teammates are downed.'),
 	ability('shorterCooldowns', 'Shorter Cooldowns', 7, 'All cooldowns are 0.2s shorter.'),
@@ -129,6 +138,7 @@ const ABILITY_LIST: AbilityInfo[] = [
 	ability('immuneToNegativeEffects', 'Status Immunity', 1, 'Immune to negative status effects.'),
 	ability('cantAttune', 'No Attunement', -3, "Can't attune to equipment.", 'was held back a couple grades as well'),
 	ability('refusesUnattuned', 'Picky', -10, 'Refuses to use unattuned equipment.'),
+	ability('sleepyhead', 'Sleepyhead', -10, 'Asleep for the first 5s of each fight.', "oh shoot, we're fighting already?"),
 	ability('scaredWhenHit', 'Coward', -13, 'When hit: Becomes scared for 3s.', "don't act like you're any better")
 ];
 

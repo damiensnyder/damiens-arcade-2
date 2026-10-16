@@ -13,7 +13,7 @@
 	const vp = $derived(mm.vp!);
 	const mine = $derived(mm.myTeam);
 	const isHost = $derived(room.host !== null && room.host === room.pov);
-	const label = $derived(phaseLabel(vp.phase, mm.teamCount, mm.playoffRounds));
+	const label = $derived(phaseLabel(mm.shownPhase() ?? vp.phase, mm.teamCount, mm.playoffRounds));
 	const anyoneWaiting = $derived(vp.teams.some((t) => !t.ready));
 	const canForceReady = $derived(isHost && vp.phase.kind !== 'pregame' && anyoneWaiting);
 	// with nobody running a team, the league only moves on when the host says so (bots are always ready)

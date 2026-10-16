@@ -9,6 +9,7 @@ import type {
 	MMPrivateEvent,
 	MMViewpoint,
 	MMViewpointWire,
+	Phase,
 	SeasonRecord,
 	StandingRow,
 	StatLine,
@@ -36,6 +37,8 @@ export class MMState {
 	 * they move on, even though the server starts the next round as soon as every fight is done.
 	 */
 	playedMatchId = $state<number | null>(null);
+	/** The playoff round the viewer has moved on to (see heldPlayoffRound). */
+	playoffRoundSeen = $state<{ season: number; round: number } | null>(null);
 	notice = $state<string | null>(null);
 	leagueExport = $state<string | null>(null);
 	/** Match IDs whose results this viewer has chosen to see. */
@@ -49,13 +52,17 @@ export class MMState {
 
 	private send: (action: MMAction) => void;
 	private storageKey: string;
+	private playoffKey: string;
 
 	constructor(roomCode: string, send: (action: unknown) => void) {
 		this.send = send;
 		this.storageKey = `mm-revealed-${roomCode}`;
+		this.playoffKey = `mm-playoff-round-${roomCode}`;
 		try {
 			const saved = JSON.parse(localStorage.getItem(this.storageKey) ?? '[]');
 			if (Array.isArray(saved)) this.revealed = new Set(saved.filter((x) => typeof x === 'number'));
+			const seen = JSON.parse(localStorage.getItem(this.playoffKey) ?? 'null');
+			if (typeof seen?.season === 'number' && typeof seen?.round === 'number') this.playoffRoundSeen = seen;
 		} catch {
 			// private browsing or bad data; start fresh
 		}
@@ -274,28 +281,58 @@ export class MMState {
 	}
 
 	/**
-	 * The viewer's just-played match, once the league has moved on to the next round but the
-	 * viewer hasn't. Not kept for a playoff loss, since there's nothing to move on to.
+	 * The viewer's just-played regular-season match, once the league has moved on to the next week
+	 * (or the playoffs) but the viewer hasn't. Playoff rounds are held by heldPlayoffRound instead.
 	 */
 	heldMatch(): Match | undefined {
 		const vp = this.vp;
 		if (!vp || this.playedMatchId === null) return undefined;
 		if (vp.phase.kind !== 'regularSeason' && vp.phase.kind !== 'playoffs') return undefined;
 		const held = vp.matches.find((m) => m.id === this.playedMatchId && m.season === vp.season);
-		if (!held || this.currentMatches().some((m) => m.id === held.id)) return undefined;
-		if (held.round !== null && !this.myCurrentMatch()) return undefined;
+		if (!held || held.week === null || this.currentMatches().some((m) => m.id === held.id)) return undefined;
 		return held;
 	}
 
-	/** My most recent finished match from an earlier round, for the "last week" card. */
-	myLastMatch(): Match | undefined {
+	/**
+	 * The playoff round the viewer is still on, once the league has moved past it. Every team in
+	 * the bracket moves on round by round themselves, eliminated or not, so whether there's a
+	 * next round for them doesn't give away how their fight went. Never the final: the
+	 * season-over screen hides the champion anyway.
+	 */
+	heldPlayoffRound(): number | null {
 		const vp = this.vp;
 		const mine = vp?.myTeam;
-		if (!vp || mine == null) return undefined;
-		const current = new Set(this.currentMatches().map((m) => m.id));
-		return vp.matches
-			.filter((m) => m.season === vp.season && m.result && !current.has(m.id) && (m.a === mine || m.b === mine))
-			.at(-1);
+		const rounds = vp?.bracket?.rounds;
+		if (!vp || mine == null || !rounds || rounds.length === 0) return null;
+		if (vp.phase.kind !== 'playoffs' && vp.phase.kind !== 'seasonOver') return null;
+		if (!rounds[0].some((p) => p.a.team === mine || p.b.team === mine)) return null;
+		const current = vp.phase.kind === 'playoffs' ? vp.phase.round : rounds.length - 1;
+		const seen = this.playoffRoundSeen?.season === vp.season ? this.playoffRoundSeen.round : 0;
+		return seen < current ? seen : null;
+	}
+
+	/** Whether the viewer played a match in this playoff round (rather than having a bye or being out). */
+	playedInRound(round: number): boolean {
+		const vp = this.vp;
+		return !!vp && vp.matches.some((m) => m.season === vp.season && m.round === round && (m.a === vp.myTeam || m.b === vp.myTeam));
+	}
+
+	moveOnFromPlayoffRound(): void {
+		const vp = this.vp;
+		const held = this.heldPlayoffRound();
+		if (!vp || held === null) return;
+		this.playoffRoundSeen = { season: vp.season, round: held + 1 };
+		try {
+			localStorage.setItem(this.playoffKey, JSON.stringify(this.playoffRoundSeen));
+		} catch {
+			// not worth bothering anyone about
+		}
+	}
+
+	/** The phase as the viewer should see it: still on the playoff round they haven't moved on from. */
+	shownPhase(): Phase | null {
+		const held = this.heldPlayoffRound();
+		return held !== null ? { kind: 'playoffs', round: held } : (this.vp?.phase ?? null);
 	}
 
 	/** Finds a fighter anywhere in the league (rosters, contracts up, free agents). */

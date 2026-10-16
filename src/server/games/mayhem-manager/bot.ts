@@ -152,13 +152,22 @@ function spend(options: Option[], fighters: Fighter[], gear: Gear[], budget: num
 }
 
 /**
+ * Shop items count this many times over while planning. A share of an item at a share of its
+ * price misses that buying an expensive one takes its whole price, saved up, so without this bots
+ * arrive at the shop with too little to afford them. Up to about 2.5 the bots are no weaker
+ * (scripts/mm-h2h.ts), but every dollar saved is one not spent on fighters, so rosters shrink:
+ * at 1.5 they average just over 3 fighters and buy $35+ items about 10% of the times they're offered.
+ */
+const SHOP_RESERVE = 1.5;
+
+/**
  * The shop will offer a random few of the catalog's items. Until it does, bots count each item as
  * a possible purchase, scaled by its chance of being offered, so they keep money for gear their
  * fighters would use instead of spending it all on fighters.
  */
 function expectedShop(): Option[] {
 	const chance = SHOP_SIZE / EQUIPMENT_KEYS.length;
-	return EQUIPMENT_KEYS.map((key) => ({ gear: { id: -1, key }, price: EQUIPMENT[key].price * chance, years: NEW_EQUIPMENT_YEARS, chance }));
+	return EQUIPMENT_KEYS.map((key) => ({ gear: { id: -1, key }, price: EQUIPMENT[key].price * chance, years: NEW_EQUIPMENT_YEARS * SHOP_RESERVE, chance }));
 }
 
 /**

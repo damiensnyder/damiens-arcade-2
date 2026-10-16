@@ -32,6 +32,8 @@ export interface TeamState {
 	fighters: Fighter[];
 	equipment: Equipment[];
 	titles: number;
+	/** The season the team joined the league (for new-franchise money; taking over a bot's team doesn't count). */
+	firstSeason: number;
 	expiring: ExpiringContract[];
 	repairs: RepairItem[];
 	shop: ShopItem[];
@@ -117,6 +119,8 @@ const team = z.object({
 	fighters: z.array(fighter).max(50),
 	equipment: z.array(equipment).max(100),
 	titles: nonneg,
+	// leagues saved before this was tracked: an established team
+	firstSeason: int.min(1).default(1),
 	expiring: z.array(z.object({ fighter, ask: z.number(), decision })),
 	repairs: z.array(z.object({ equipment, price: z.number(), decision })),
 	shop: z.array(z.object({ id: nonneg, key: equipmentKey, price: z.number(), bought: z.boolean() })),

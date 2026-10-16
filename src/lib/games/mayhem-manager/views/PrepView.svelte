@@ -6,13 +6,10 @@
 	import EquipmentCard from '../components/EquipmentCard.svelte';
 	import FighterSprite from '../components/FighterSprite.svelte';
 	import MatchupHeader from '../components/MatchupHeader.svelte';
-	import ResultButtons from '../components/ResultButtons.svelte';
 	import StatRows from '../components/StatRows.svelte';
-	import TeamLogo from '../components/TeamLogo.svelte';
 	import { EQUIPMENT } from '../catalog.js';
-	import { canWearTogether, roundName } from '../rules.js';
+	import { canWearTogether } from '../rules.js';
 	import type { MMState } from '../state.svelte.js';
-	import { TEAMS } from '../teams.js';
 	import type { Equipment, Fighter } from '../types.js';
 
 	const mm = getContext<MMState>('mm');
@@ -20,7 +17,6 @@
 	const match = $derived(mm.myCurrentMatch()!);
 	const opponent = $derived(match.a === mine.id ? match.b : match.a);
 	const lineup = $derived(mm.vp!.private?.lineup ?? {});
-	const last = $derived(mm.myLastMatch());
 
 	const keyOf = (id: number) => mine.equipment.find((e) => e.id === id)?.key ?? '';
 	const holderOf = (e: Equipment) => mine.fighters.find((f) => (lineup[f.id] ?? []).includes(e.id)) ?? null;
@@ -45,13 +41,6 @@
 	function equip(e: Equipment, value: string) {
 		mm.act({ type: 'equip', equipment: e.id, fighter: value === '' ? null : Number(value) });
 	}
-
-	function lastLabel(): string {
-		if (!last) return '';
-		const opp = last.a === mine.id ? last.b : last.a;
-		const when = last.week !== null ? `Week ${last.week + 1}` : roundName(last.round!, mm.playoffRounds);
-		return `${when}: vs the ${TEAMS[opp].last}`;
-	}
 </script>
 
 <main class="panel prep">
@@ -63,13 +52,6 @@
 			{/snippet}
 		</MatchupHeader>
 	</div>
-
-	{#if last}
-		<div class="full card last">
-			<span class="row"><TeamLogo team={last.a === mine.id ? last.b : last.a} />{lastLabel()}</span>
-			<ResultButtons match={last} />
-		</div>
-	{/if}
 
 	<section class="col fighters">
 		<h3>Your fighters</h3>
@@ -124,13 +106,6 @@
 	.full {
 		flex: 1 1 100%;
 		display: block;
-	}
-
-	.last {
-		flex-direction: row !important;
-		align-items: center;
-		justify-content: space-between;
-		flex-wrap: wrap;
 	}
 
 	.fighters {

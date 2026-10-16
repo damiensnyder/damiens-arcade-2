@@ -59,6 +59,11 @@ interface AttackOption {
 const MELEE_COMMIT_LEAD = 0.1;
 /** How strongly retreating fighters are pulled toward the middle of the arena, against being pushed away from enemies. */
 const RETREAT_CENTERING = 0.7;
+/**
+ * Sleeping fighters wake up when they take damage, so they're worth this much less as targets
+ * while anyone else is awake: better to deal with the fighters who can fight back first.
+ */
+const ASLEEP_TARGET_WEIGHT = 0.2;
 
 export class BattleFighter {
 	readonly fight: Fight;
@@ -218,14 +223,9 @@ export class BattleFighter {
 	 */
 	private rawDps(option: AttackOption, target = this.nearestEnemy()): number {
 		const damage = (target && option.spec.damageAt?.(option.item, target)) ?? option.damage;
-		const perUse =
-			option.spec.kind === 'melee'
-				? option.spec.fixed
-					? damage
-					: damage * this.meleeDamageMultiplier(option.spec.scalesWith)
-				: option.spec.kind === 'ranged'
-					? damage * this.rangedHitChance()
-					: damage;
+		const scaled = option.spec.kind === 'melee' && !option.spec.fixed ? damage * this.meleeDamageMultiplier(option.spec.scalesWith) : damage;
+		const extra = (option.spec.lingering ?? 0) + ((target && option.spec.effectValue?.(option.item, target)) ?? 0);
+		const perUse = (scaled + extra) * (option.spec.kind === 'ranged' ? this.rangedHitChance() : 1);
 		return perUse / this.cycleTime(option);
 	}
 
@@ -265,8 +265,9 @@ export class BattleFighter {
 
 	/** How good it is to attack this target: their danger over the time it'd take to knock them out. */
 	private valueOfAttacking(target: BattleFighter, rawDps: number, timeToFirstHit: number): number {
+		const weight = target.targetWeight() * (target.isAsleep() ? ASLEEP_TARGET_WEIGHT : 1);
 		return (
-			(target.danger() * target.targetWeight()) /
+			(target.danger() * weight) /
 			(timeToFirstHit + target.effectiveHp() / Math.max(rawDps, EPSILON))
 		);
 	}
@@ -316,8 +317,10 @@ export class BattleFighter {
 		const startX = this.x;
 		const startY = this.y;
 
-		if (this.effects.some((e) => e.name === 'scared')) {
-			this.retreat();
+		if (this.isAsleep()) return;
+		const scared = this.effects.find((e) => e.name === 'scared');
+		if (scared) {
+			this.retreat(scared.source && scared.source.hp > 0 ? [scared.source] : undefined);
 			return;
 		}
 		// taunted fighters can only go after whoever taunted them (area attacks still hit everyone)
@@ -442,7 +445,7 @@ export class BattleFighter {
 	private keepAwayFromMelee(): void {
 		let threat: BattleFighter | null = null;
 		for (const e of this.enemies()) {
-			if (!e.prefersMelee() || e.timeToReach(this) >= this.cooldown) continue;
+			if (e.isAsleep() || !e.prefersMelee() || e.timeToReach(this) >= this.cooldown) continue;
 			if (threat === null || this.distanceTo(e) < this.distanceTo(threat)) threat = e;
 		}
 		if (threat) this.retreat();
@@ -503,6 +506,7 @@ export class BattleFighter {
 		});
 		target.log({ type: 'text', fighter: target.index, text: String(amount) });
 		if (isHit) target.log({ type: 'particle', fighter: target.index, img: '/mm/damage.png' });
+		if (target.hp > 0) target.removeEffect('asleep');
 		if (target.hp <= 0) {
 			if (target.team !== this.team) this.kos++;
 			target.kod++;
@@ -523,7 +527,7 @@ export class BattleFighter {
 
 	addEffect(effect: StatusEffect): void {
 		if (this.hp <= 0) return;
-		if (this.items.some((i) => i.behavior.blocksEffect?.(i, effect))) return;
+		if (this.wouldBlock(effect)) return;
 		const existing = this.effects.find((e) => e.name === effect.name);
 		if (existing) {
 			existing.remaining = Math.max(existing.remaining, effect.remaining);
@@ -532,6 +536,23 @@ export class BattleFighter {
 		this.applyMods(effect.mods, 1);
 		this.effects.push(effect);
 		this.log({ type: 'animation', fighter: this.index, updates: { stats: this.stats, tint: this.tint() } });
+	}
+
+	removeEffect(name: string): void {
+		const effect = this.effects.find((e) => e.name === name);
+		if (!effect) return;
+		this.effects = this.effects.filter((e) => e !== effect);
+		this.applyMods(effect.mods, -1);
+		this.log({ type: 'animation', fighter: this.index, updates: { stats: this.stats, tint: this.tint() } });
+	}
+
+	isAsleep(): boolean {
+		return this.effects.some((e) => e.name === 'asleep');
+	}
+
+	/** Whether an effect like this one would be kept off the fighter (by an immunity). */
+	wouldBlock(effect: StatusEffect): boolean {
+		return this.items.some((i) => i.behavior.blocksEffect?.(i, effect));
 	}
 
 	/** All status effect tints blended together. */
@@ -595,13 +616,13 @@ export class BattleFighter {
 	}
 
 	/**
-	 * Backs away from all enemies at once (closer ones count for more), drifting toward the middle
-	 * of the arena so nobody gets pinned against a wall.
+	 * Backs away from all enemies at once, or just `from` (closer ones count for more), drifting
+	 * toward the middle of the arena so nobody gets pinned against a wall.
 	 */
-	private retreat(): void {
+	private retreat(from = this.enemies()): void {
 		let awayX = 0;
 		let awayY = 0;
-		for (const e of this.enemies()) {
+		for (const e of from) {
 			const distance = Math.max(this.distanceTo(e), 1);
 			awayX += (this.x - e.x) / (distance * distance);
 			awayY += (this.y - e.y) / (distance * distance);

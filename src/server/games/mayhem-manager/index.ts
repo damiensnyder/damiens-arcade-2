@@ -14,6 +14,7 @@ import {
 	canWearTogether,
 	computeStandings,
 	fighterPrice,
+	franchiseBonus,
 	freeAgentPrices,
 	isMaxed,
 	playoffRoundCount,
@@ -215,7 +216,8 @@ export default class MayhemManager extends GameLogicHandler {
 		return {
 			id,
 			controller,
-			money: STARTING_MONEY,
+			money: STARTING_MONEY + franchiseBonus(1),
+			firstSeason: this.s.season,
 			ready: controller === 'bot',
 			fighters: [],
 			equipment: [],
@@ -426,7 +428,7 @@ export default class MayhemManager extends GameLogicHandler {
 					decision: 'pending' as Decision
 				}));
 			team.equipment = team.equipment.filter((e) => e.yearsLeft > 0);
-			team.money = Math.ceil(team.money / 2) + SEASON_INCOME;
+			team.money = Math.ceil(team.money / 2) + SEASON_INCOME + franchiseBonus(this.s.season - team.firstSeason + 1);
 			team.lineup = sanitizeLineup(team.fighters, team.equipment, team.lineup);
 		}
 		// last season's unsigned fighters are a year older and develop like everyone else; this year's rookies arrive now so people can see who's coming

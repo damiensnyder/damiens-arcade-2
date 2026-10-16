@@ -147,6 +147,7 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 		let hitsPerSecond = 0;
 		let ranged = false;
 		let primary: Part | null = null;
+		let bestScore = 0;
 		for (const part of parts) {
 			const spec = part.behavior.attack;
 			if (!spec) continue;
@@ -155,11 +156,16 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 			const strength = Math.max(0.5 + 0.1 * s[spec.scalesWith ?? 'strength'], 0.25);
 			const hitChance = Math.max(0, Math.min(0.25 + 0.05 * s.accuracy, 1));
 			const share = uptime(Math.max(INITIAL_COOLDOWN, spec.kind === 'melee' ? approach : 0) + charges * timeToCharge);
-			const hit = damage + (spec.lingering ?? 0);
-			const perUse = spec.kind === 'melee' ? hit * (spec.fixed ? 1 : strength) : spec.kind === 'ranged' ? hit * hitChance : hit * (1 + TUNING.aoeSpread * Math.max(around.enemies - 1, 0));
-			if ((perUse * share) / cycle > dps) {
+			const hit = (spec.kind === 'melee' && !spec.fixed ? damage * strength : damage) + (spec.lingering ?? 0);
+			const perUse = spec.kind === 'melee' ? hit : spec.kind === 'ranged' ? hit * hitChance : hit * (1 + TUNING.aoeSpread * Math.max(around.enemies - 1, 0));
+			const rate = ((spec.kind === 'ranged' ? hitChance : 1) * share) / cycle;
+			// attacks the sim picks for their side effects (like putting the target to sleep) are picked
+			// for them here too
+			const effects = spec.effectValue ? (part.behavior.value?.dps?.(part.attuned, { ...ctx, timeToCharge, hitsPerSecond: rate }) ?? 0) : 0;
+			if ((perUse * share) / cycle + effects > bestScore) {
+				bestScore = (perUse * share) / cycle + effects;
 				dps = (perUse * share) / cycle;
-				hitsPerSecond = ((spec.kind === 'ranged' ? hitChance : 1) * share) / cycle;
+				hitsPerSecond = rate;
 				ranged = spec.kind !== 'melee';
 				primary = part;
 			}

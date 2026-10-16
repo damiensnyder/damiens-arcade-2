@@ -9,14 +9,16 @@
 
 import type { Stats } from '../../../../lib/games/mayhem-manager/types.js';
 import type { BattleFighter, BattleItem, StatusEffect } from './fighter.js';
-import { MELEE_RANGE, TICK_LENGTH, TYPICAL_FIGHT_SECONDS, TYPICAL_HIT } from './constants.js';
+import { MAX_FIGHT_SECONDS, MELEE_RANGE, TICK_LENGTH, TYPICAL_FIGHT_SECONDS, TYPICAL_HIT } from './constants.js';
 
 export interface AttackSpec {
 	kind: 'melee' | 'ranged' | 'aoe';
 	/** [unattuned, attuned]. For attacks with `damageAt`, a typical value used for planning. */
 	damage: [number, number];
-	/** Damage each hit does later (like burning), for planning. */
+	/** Damage each hit does later (like burning), for planning. Not scaled by strength. */
 	lingering?: number;
+	/** What a hit's side effects on this target are worth, in damage, for planning (like putting them to sleep). */
+	effectValue?: (item: BattleItem, target: BattleFighter) => number;
 	cooldown: [number, number];
 	charges?: [number, number];
 	/** Meters the target is pushed back. */
@@ -136,10 +138,25 @@ function taunt(target: BattleFighter, source: BattleFighter): void {
 	target.addEffect({ name: 'taunted', remaining: 1, negative: true, mods: {}, source, tint: [1, 0.2, 0.2, 0.3] });
 }
 
-/** Scared fighters run from the nearest enemy and don't attack or use items. */
-function scare(target: BattleFighter, seconds: number): void {
-	target.addEffect({ name: 'scared', remaining: seconds, negative: true, mods: {}, tint: [0.6, 0.3, 1, 0.3] });
+/** Scared fighters run from whoever scared them and don't attack or use items. */
+function scare(target: BattleFighter, seconds: number, source: BattleFighter): void {
+	target.addEffect({ name: 'scared', remaining: seconds, negative: true, mods: {}, source, tint: [0.6, 0.3, 1, 0.3] });
 }
+
+const asleep = (seconds = MAX_FIGHT_SECONDS): StatusEffect => ({ name: 'asleep', remaining: seconds, negative: true, mods: {}, tint: [0.3, 0.3, 0.6, 0.35] });
+
+/** Sleeping fighters don't move or act until they take damage (see BattleFighter.dealDamage) or it wears off. */
+function sleep(target: BattleFighter, seconds?: number): void {
+	if (target.hp <= 0 || target.isAsleep() || target.wouldBlock(asleep())) return;
+	target.addEffect(asleep(seconds));
+	target.log({ type: 'text', fighter: target.index, text: 'zzz', color: '#aac' });
+}
+
+/**
+ * Putting someone to sleep, for planning: like dealing this share of their effective HP. Knocking
+ * them out takes them out for the rest of the fight; sleep, until someone hits them.
+ */
+const SLEEP_PLANNING = 0.6;
 
 // ---- what item actions are worth ----
 //
@@ -224,6 +241,9 @@ const IN_MELEE = 0.5;
 /** Damage per second of a typical enemy. */
 const TYPICAL_DPS = 10;
 
+/** Seconds a sleeping enemy stays asleep, on average: longer when teammates can deal with the rest. */
+const sleepSeconds = (ctx: ValueContext) => (ctx.teammates > 0 ? 6 : 2);
+
 /** Freezing a target on each hit: it attacks at half speed while frozen. */
 function freezeValue(seconds: number, ctx: ValueContext): number {
 	return 0.5 * TYPICAL_DPS * Math.min(1, seconds * ctx.hitsPerSecond);
@@ -246,6 +266,36 @@ export const FISTS: Behavior = {
 export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	battleAxe: { attack: { kind: 'melee', damage: [70, 90], cooldown: [4, 4], knockback: 3 } },
 	bow: { attack: { kind: 'ranged', damage: [50, 65], cooldown: [5, 5], knockback: 1, projectile: '/mm/projectiles/arrow.png' } },
+	torch: {
+		// burning doesn't stack, so hitting every 2.5s keeps it going: about half its 25 damage per hit
+		attack: { kind: 'melee', damage: [12, 20], cooldown: [2.5, 2.5], knockback: 1, lingering: 12.5 },
+		onHitDealt: (item, target, _damage, source) => {
+			if (source === item) burn(target, item.owner, 5);
+		}
+	},
+	tranquilizerGun: {
+		attack: {
+			kind: 'ranged',
+			damage: [10, 10],
+			cooldown: [4, 4],
+			knockback: 0.5,
+			projectile: '/mm/projectiles/bullet.png',
+			effectValue: (_item, target) => (target.isAsleep() || target.wouldBlock(asleep()) ? 0 : SLEEP_PLANNING * target.effectiveHp())
+		},
+		onHitDealt: (item, target, _damage, source) => {
+			if (source === item) sleep(target);
+		},
+		// the enemy's damage that doesn't happen while they sleep
+		value: { dps: (_attuned, ctx) => Math.min(TYPICAL_DPS * sleepSeconds(ctx) * ctx.hitsPerSecond, TYPICAL_DPS * ctx.enemies * 0.8) }
+	},
+	flareGun: {
+		// the target's burning, plus whoever's near them
+		attack: { kind: 'ranged', damage: [20, 30], cooldown: [3, 3], knockback: 1, projectile: '/mm/projectiles/fireball.png', lingering: 20 },
+		onHitDealt: (item, target, _damage, source) => {
+			if (source !== item) return;
+			for (const e of item.owner.enemies()) if (e === target || e.distanceTo(target) <= 10) burn(e, item.owner, 5);
+		}
+	},
 	cornDog: {
 		action: {
 			priority: (item) => healValue(item.owner, 40, item.owner.actionTime(0, 2)),
@@ -383,11 +433,12 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	moneySword: {
 		attack: {
 			kind: 'melee',
-			// typical: a team with about $16 left during the season
-			damage: [20, 25],
+			// typical, for planning: bots keep about $6 into the season, so it mostly whiffs (it averages
+			// about 6 a hit, or 8 attuned); a team that banks money gets far more out of it
+			damage: [6, 8],
 			cooldown: [3, 3],
 			knockback: 2,
-			damageAt: (item) => 10 * Math.floor(item.owner.teamMoney() / (item.attuned ? 6 : 8))
+			damageAt: (item) => 20 * Math.floor(item.owner.teamMoney() / (item.attuned ? 10 : 12))
 		}
 	},
 	halo: {
@@ -505,6 +556,15 @@ export const ABILITY_BEHAVIORS: Record<string, Behavior> = {
 		onHitDealt: (item, target) => item.owner.dealDamage(target, 5),
 		value: { dps: (_attuned, ctx) => 5 * ctx.hitsPerSecond }
 	},
+	bloodlust: {
+		onHitDealt: (item) => item.owner.changeStats({ strength: 1 }),
+		value: { stats: (_attuned, ctx) => ({ strength: (ctx.hitsPerSecond * TYPICAL_FIGHT_SECONDS) / 2 }) }
+	},
+	sleepyhead: {
+		onFightStart: (item) => sleep(item.owner, 5),
+		// nobody can act for the first 3s anyway; after that, 2s more of not fighting
+		value: { output: (_attuned, ctx) => (ctx.immune ? 1 : 1 - 2 / TYPICAL_FIGHT_SECONDS - 0.05) }
+	},
 	gainStrengthOnHitTaken: {
 		onHitTaken: (item) => item.owner.changeStats({ strength: 2 }),
 		value: { stats: (_attuned, ctx) => ({ strength: ctx.hitsTaken }) }
@@ -526,9 +586,9 @@ export const ABILITY_BEHAVIORS: Record<string, Behavior> = {
 	},
 	pepTalk: {
 		onFightStart: (item) => {
-			for (const t of item.owner.teammates()) if (t !== item.owner) hype(t, 5);
+			for (const t of item.owner.teammates()) if (t !== item.owner) hype(t, 3);
 		},
-		value: { teamHype: () => 5 / TYPICAL_FIGHT_SECONDS }
+		value: { teamHype: () => 3 / TYPICAL_FIGHT_SECONDS }
 	},
 	taunt: {
 		onTick: (item) => {
@@ -538,7 +598,7 @@ export const ABILITY_BEHAVIORS: Record<string, Behavior> = {
 		value: { weight: 3 }
 	},
 	scaredWhenHit: {
-		onHitTaken: (item) => scare(item.owner, 3),
+		onHitTaken: (item, attacker) => scare(item.owner, 3, attacker),
 		// scared fighters run, so they take about half as many hits as they otherwise would
 		value: { output: (_attuned, ctx) => (ctx.immune ? 1 : 1 - Math.min(0.8, (3 * ctx.hitsTaken) / 2 / TYPICAL_FIGHT_SECONDS)) }
 	},

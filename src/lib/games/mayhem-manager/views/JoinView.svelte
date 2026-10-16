@@ -53,6 +53,7 @@
 							<button type="button" class="mini" onclick={() => mm.act({ type: 'removeBot', team: c.id })}>remove</button>
 						{:else if c.status === 'mine'}
 							<span class="own small">your team</span>
+							{#if pregame}<button type="button" class="mini" onclick={() => mm.act({ type: 'leave' })}>leave</button>{/if}
 						{/if}
 					</div>
 				</div>
@@ -61,6 +62,22 @@
 	</section>
 
 	<aside class="col side-col">
+		<!-- above the list, so the buttons don't move down as teams are added -->
+		<div class="side-actions desktop-only">
+			{#if mine && pregame}
+				<button type="button" class:go={!mine.ready} onclick={() => mm.act({ type: mine.ready ? 'unready' : 'ready' })}>{mine.ready ? 'unready' : 'ready'}</button>
+			{/if}
+			{#if isHost && canAdd}
+				<button type="button" onclick={() => mm.act({ type: 'addBot' })}>add a bot</button>
+			{/if}
+			{#if isHost && pregame}
+				<button type="button" class="go" disabled={vp.teams.length === 0} onclick={() => mm.act({ type: 'forceReady' })}>start season</button>
+			{/if}
+		</div>
+		{#if !mine && pregame}
+			<p class="muted small">pick a team to play, or just watch.</p>
+		{/if}
+
 		<div class="card">
 			<h3>Players</h3>
 			{#if vp.teams.length === 0}
@@ -76,28 +93,11 @@
 				<span class="muted small note">odd number of teams – a bot will be added to make it even.</span>
 			{/if}
 		</div>
-
-		<div class="side-actions desktop-only">
-			{#if mine && pregame}
-				<button type="button" onclick={() => mm.act({ type: 'leave' })}>leave team</button>
-				<button type="button" class:go={!mine.ready} onclick={() => mm.act({ type: mine.ready ? 'unready' : 'ready' })}>{mine.ready ? 'unready' : 'ready'}</button>
-			{/if}
-			{#if isHost && canAdd}
-				<button type="button" onclick={() => mm.act({ type: 'addBot' })}>add a bot</button>
-			{/if}
-			{#if isHost && pregame}
-				<button type="button" class="go" disabled={vp.teams.length === 0} onclick={() => mm.act({ type: 'forceReady' })}>start season</button>
-			{/if}
-		</div>
-		{#if !mine && pregame}
-			<p class="muted small">pick a team to play, or just watch.</p>
-		{/if}
 	</aside>
 </main>
 
 <ActionBar>
 	{#if mine && pregame}
-		<button type="button" onclick={() => mm.act({ type: 'leave' })}>leave team</button>
 		<button type="button" class:go={!mine.ready} onclick={() => mm.act({ type: mine.ready ? 'unready' : 'ready' })}>{mine.ready ? 'unready' : 'ready'}</button>
 	{/if}
 	{#if isHost && canAdd}

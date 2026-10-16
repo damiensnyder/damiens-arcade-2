@@ -129,6 +129,7 @@ export class Fight {
 		this.fightTicks++;
 		this.overtime();
 		for (const f of this.fighters) f.upkeep();
+		this.wakeIfEveryoneAsleep();
 		for (const f of this.rng.shuffle(this.fighters.slice())) f.act();
 	}
 
@@ -140,6 +141,13 @@ export class Fight {
 		for (const f of this.fighters) {
 			if (f.hp > 0) f.changeStats({ toughness: -OVERTIME_TOUGHNESS_LOSS });
 		}
+	}
+
+	/** If nobody standing is awake, nobody would ever wake up, so the crowd wakes everyone. */
+	private wakeIfEveryoneAsleep(): void {
+		const standing = this.fighters.filter((f) => f.hp > 0);
+		if (standing.length === 0 || !standing.every((f) => f.isAsleep())) return;
+		for (const f of standing) f.removeEffect('asleep');
 	}
 
 	private newTick(): void {

@@ -101,6 +101,11 @@
 				</EquipmentCard>
 			{/each}
 		</div>
+
+		<!-- kept well away from ready, and only here, between seasons -->
+		<p class="leave muted small">
+			done running the team? <button type="button" class="mini" onclick={() => confirm('Leave your team? A bot will take over.') && mm.act({ type: 'leave' })}>leave team</button> and a bot will take over.
+		</p>
 	</section>
 
 	<aside class="col side">
@@ -141,6 +146,10 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
+	}
+
+	.leave {
+		margin-top: 2rem;
 	}
 
 	.repairs {

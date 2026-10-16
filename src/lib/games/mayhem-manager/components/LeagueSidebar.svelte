@@ -2,6 +2,7 @@
 	// League card with each team's roster size, money and ready status.
 	import { getContext } from 'svelte';
 	import type { RoomState } from '../../room.svelte.js';
+	import { MAX_TEAMS } from '../rules.js';
 	import type { MMState } from '../state.svelte.js';
 	import type { TeamView } from '../types.js';
 	import { TEAMS } from '../teams.js';
@@ -19,7 +20,13 @@
 </script>
 
 <div class="card">
-	<h3>League</h3>
+	<!-- add a bot sits up here so it doesn't move down as the list grows -->
+	<div class="row between">
+		<h3>League</h3>
+		{#if isHost && vp.phase.kind === 'offseason' && vp.teams.length < MAX_TEAMS}
+			<button type="button" class="mini" onclick={() => mm.act({ type: 'addBot' })}>add a bot</button>
+		{/if}
+	</div>
 	{#each vp.teams as t (t.id)}
 		<div class="lg-row" class:me={t.isMine}>
 			<TeamLogo team={t.id} />
@@ -37,16 +44,6 @@
 			{/if}
 		</div>
 	{/each}
-	{#if mm.myTeam || (isHost && vp.phase.kind === 'offseason')}
-		<div class="row between" style="margin-top: 0.35rem">
-			{#if mm.myTeam}
-				<button type="button" onclick={() => confirm('Leave your team? A bot will take over.') && mm.act({ type: 'leave' })}>leave team</button>
-			{/if}
-			{#if isHost && vp.phase.kind === 'offseason' && vp.teams.length < 16}
-				<button type="button" onclick={() => mm.act({ type: 'addBot' })}>add a bot</button>
-			{/if}
-		</div>
-	{/if}
 </div>
 
 <style>

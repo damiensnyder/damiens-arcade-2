@@ -7,6 +7,13 @@ export const MAX_TEAMS = 16;
 export const STARTING_MONEY = 100;
 /** Each offseason, teams keep half their money and get this much more. */
 export const SEASON_INCOME = 100;
+/** Extra money in a new franchise's first and second seasons, while it builds a team from scratch. */
+const NEW_FRANCHISE_BONUS: Record<number, number> = { 1: 50, 2: 25 };
+
+/** The bonus for a team in its `nth` season (1 for the season it joined). */
+export function franchiseBonus(nth: number): number {
+	return NEW_FRANCHISE_BONUS[nth] ?? 0;
+}
 export const FA_DAYS = 3;
 export const MAX_REGULAR_SEASON_WEEKS = 4;
 export const FA_CONTRACT_YEARS = 2;
