@@ -35,13 +35,17 @@ Melee. Deals 12 [attuned: 20] damage. Cooldown 2.5s. On hit: Set the target on f
 
 The Money Sword
 hand, $12
-Melee. Deals 20 damage for every $12 [attuned: $10] your team has. Cooldown 3s.
+Melee. Deals 10 damage for every $8 [attuned: $6] your team has. Cooldown 3s.
 
 Steel-Toed Boots
 feet, $10
 Melee. Deals 20 [attuned: 25] damage. Cooldown 3.5s. +1 toughness.
 
 ## Ranged weapons
+
+Lasest Blaster
+hand, $60
+Ranged. Deals 70 [attuned: 80] damage. Cooldown 2s.
 
 Wand of the Great Pyromaniac
 hand, $40
@@ -53,7 +57,7 @@ hand, $36
 Ranged. Deals 40 [attuned: 50] damage. Cooldown 2s.
 
 Tranquilizer Gun
-hand, $29
+hand, $32
 Ranged. Deals 10 damage. Cooldown 4s. On hit: Target falls asleep.
 
 Flare Gun
@@ -71,13 +75,17 @@ Ranged. Deals 12 damage. Cooldown 1.5s. On hit dealt: Freeze the target for 1s [
 ## Single-use
 
 Halo
-head, $37
+head, $25
 When a teammate is KO'd, revive them at 50% HP. Remove Halo.
 
 Flamingo Floaty
 legs, $16
 On hit taken: Prevent all damage. Remove Flamingo Floaty.
 *pop!*
+
+Flashbang
+hand, $15
+Single-use. Ranged. On hit: Stun all enemies within 10m of the target for 3s.
 
 Corn Dog
 hand, $12
@@ -139,6 +147,11 @@ legs, $24
 Makes opponents much less likely to target the wearer.
 you wouldn't hit someone in a frilly little skirt, would you?
 
+Shirt of Many Belts
+torso, $19
+On melee hit taken: Stun the attacker for 2s.
+uh oh, your weapon seems to have become lodged in my many belts
+
 Knife Shoes
 feet, $18
 Whenever an opponent enters melee range, deal 5 [attuned: 6] damage to them.
@@ -160,10 +173,18 @@ Shrapnel
 head, $13
 When KO'd: Deal 40 damage to ALL fighters within 10m.
 
+Bandolier
+torso, $12
+Ranged cooldowns are 0.5s shorter.
+
 Rhinoceros Beetle Horn
 head, $10
 On hit dealt: Gain +1 [attuned: +1.5] strength.
 the rhinoceros beetle is the strongest creature on earth
+
+Anti-Static Wristband
+hand, $9
+On hit: Remove all charges from the target.
 
 Eyepatch
 head, $8
@@ -183,13 +204,13 @@ Oomph, $16
 On hit dealt: Target loses 5 extra HP.
 just has a little more "oomph"
 
-Bloodlust, $10
+Bloodlust, $14
 On hit dealt: Gain 0.5 strength.
 
 Enrage, $13
 On hit taken: Gain 1 strength.
 
-Pep Talk, $6
+Pep Talk, $11
 Teammates start each fight hyped for 3s.
 delivers quite the pep talk
 
@@ -222,12 +243,12 @@ Deals double damage to targets with a negative status effect.
 Stronger Summons, $1
 This fighter's summons spawn with +50% HP.
 
+Status Immunity, $1
+Immune to negative status effects.
+
 Klutz, -$2
 When hit: 10% chance to drop a handheld equipment.
 bit of a klutz. teehee!
-
-Status Immunity, $1
-Immune to negative status effects.
 
 No Attunement, -$3
 Can't attune to equipment.
@@ -236,8 +257,8 @@ was held back a couple grades as well
 Picky, -$10
 Refuses to use unattuned equipment.
 
-Sleepyhead, -$10
-Asleep for the first 5s of each fight.
+Inattentive, -$12
+Starts each fight stunned for 5s.
 oh shoot, we're fighting already?
 
 Coward, -$13
@@ -247,6 +268,7 @@ don't act like you're any better
 # Effect explanations
 
 on fire = takes 5 damage per second for 5s. (does not stack.)
+stunned = can't move or use actions.
 asleep = can't move or use actions until taking damage.
 taunted = must attack the taunting enemy.
 scared = runs away from the scaring enemy, doesn't take any actions.
