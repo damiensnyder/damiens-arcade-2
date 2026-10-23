@@ -1,0 +1,24 @@
+[Unit]
+Description=damiens-arcade-2 (arcade.damiensnyder.com)
+After=network.target
+
+[Service]
+User=sites
+Group=sites
+WorkingDirectory=/home/damiens-arcade-2
+Environment=NODE_ENV=production PORT=3000
+ExecStart=/opt/node/bin/node /home/damiens-arcade-2/node_modules/tsx/dist/cli.mjs src/server/index.ts
+Restart=always
+RestartSec=3
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+[Install]
+WantedBy=multi-user.target
