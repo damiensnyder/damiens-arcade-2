@@ -373,7 +373,6 @@
 			</div>
 			<button type="button" onclick={() => seekTo(replay.length - 1)}>skip to result</button>
 		</div>
-		<p class="muted small keys">space: pause · ← →: skip 5s · 1, 2, 4: speed</p>
 	</section>
 
 	<aside class="col side">
@@ -577,16 +576,6 @@
 	@keyframes money-pop {
 		from {
 			transform: scale(1.5);
-		}
-	}
-
-	.keys {
-		margin: 0;
-	}
-
-	@media (hover: none) {
-		.keys {
-			display: none;
 		}
 	}
 
