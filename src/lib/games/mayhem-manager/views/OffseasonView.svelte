@@ -89,6 +89,7 @@
 					note="owned {r.equipment.yearsOwned} yr{r.equipment.yearsOwned === 1 ? '' : 's'}{r.equipment.timesRepaired > 0 ? ` · repaired ${r.equipment.timesRepaired}x` : ''}"
 					imgSize={88}
 				>
+					{#if mm.equipmentLine(r.equipment)}<p class="muted small">{mm.equipmentLine(r.equipment)}</p>{/if}
 					{#snippet actions()}
 						{#if r.decision === 'pending'}
 							<button type="button" disabled={mine.ready} onclick={() => mm.act({ type: 'repair', equipment: r.equipment.id, decision: 'drop' })}>discard</button>

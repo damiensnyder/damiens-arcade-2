@@ -44,7 +44,7 @@ import {
 	type TeamId,
 	type TrainingPlan
 } from '../../../lib/games/mayhem-manager/types.js';
-import { packHistory, packStatLines, packTotals } from '../../../lib/games/mayhem-manager/wire.js';
+import { packHistory, packItemLines, packStatLines, packTotals } from '../../../lib/games/mayhem-manager/wire.js';
 import { BOT, type BotPolicy } from './bot.js';
 import { developFighter } from './development.js';
 import { publicFighter } from './public.js';
@@ -90,6 +90,7 @@ export default class MayhemManager extends GameLogicHandler {
 			bracket: null,
 			seasons: [],
 			statLines: [],
+			itemLines: [],
 			seasonStats: [],
 			nextId: 1,
 			rng: this.rng.state
@@ -698,7 +699,8 @@ export default class MayhemManager extends GameLogicHandler {
 			const keyOf = new Map(team.equipment.map((e) => [e.id, e.key]));
 			const lineup = sanitizeLineup(team.fighters, team.equipment, team.lineup);
 			for (const fighter of team.fighters) {
-				combatants.push({ fighter, equipment: (lineup[fighter.id] ?? []).map((id) => keyOf.get(id)!), team: team.id });
+				const ids = lineup[fighter.id] ?? [];
+				combatants.push({ fighter, equipment: ids.map((id) => keyOf.get(id)!), equipmentIds: ids, team: team.id });
 			}
 		}
 		const outcome = simulateFight(this.rng, combatants, true, new Map([a, b].map((t) => [t.id, t.money])));
@@ -728,6 +730,7 @@ export default class MayhemManager extends GameLogicHandler {
 				dmgTaken: f.dmgTaken
 			} satisfies StatLine);
 		}
+		for (const item of outcome.items) this.s.itemLines.push({ ...item, matchId: match.id });
 	}
 
 	/** Once every fight this round is done, move to the next week or playoff round. */
@@ -891,6 +894,18 @@ export default class MayhemManager extends GameLogicHandler {
 		}
 		this.s.seasonStats.push(...totals.values());
 		this.s.statLines = [];
+		// equipment keeps its totals for as long as the team has it
+		const equipment = new Map(this.s.teams.flatMap((t) => t.equipment).map((e) => [e.id, e]));
+		for (const l of this.s.itemLines) {
+			const e = equipment.get(l.equipmentId);
+			if (!e) continue;
+			const t = (e.totals ??= { dmgDealt: 0, hpHealed: 0, dmgPrevented: 0, moneyEarned: 0 });
+			t.dmgDealt += l.dmgDealt;
+			t.hpHealed += l.hpHealed;
+			t.dmgPrevented += l.dmgPrevented;
+			t.moneyEarned += l.moneyEarned;
+		}
+		this.s.itemLines = [];
 		this.s.matches = [];
 		this.s.bracket = null;
 		this.fightLogs.clear();
@@ -1008,6 +1023,7 @@ export default class MayhemManager extends GameLogicHandler {
 			matches: this.s.matches,
 			bracket: this.s.bracket,
 			stats: packStatLines(this.s.statLines),
+			items: packItemLines(this.s.itemLines),
 			historyVersion: this.historyVersion,
 			// lineups, shopping and training plans stay secret until the fight
 			private: mine ? { lineup: mine.lineup, shop: mine.shop, training: mine.training } : null

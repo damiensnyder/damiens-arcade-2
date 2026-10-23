@@ -42,6 +42,7 @@ Leagues can run for dozens of seasons, so the data that grows is kept out of tho
 
 - **Live viewpoint: the current season only.** It holds this season's matches, bracket and box scores, one line per fighter per match. Per-match detail is needed only to hide results a viewer hasn't seen. With 16 teams it's about 40 KB, mostly rosters, however old the league is.
 - **Rolled up at season end.** When the next offseason starts, the finished season's box scores collapse to one line per fighter, team and regular season/playoffs (`seasonStats`). Its matches and replays are dropped. Standings and the bracket live on in the season's record.
+- **Equipment records.** The sim credits each piece of equipment with the damage it dealt to enemies, HP it healed, damage it prevented and money it earned (`Fight.credit`). This season's are kept one line per item per match (`itemLines`) so unseen results stay hidden, and roll up into the item's own `totals` at season end, for as long as the team keeps it. Items that never do any of those have no record.
 - **History on request.** `getHistory` returns the finished seasons' records plus one career row per fighter. `getSeasonStats` returns one finished season's per-fighter totals. The client fetches these only when a view needs them, and caches them until `historyVersion` changes (once per season, or on import). Both are sent as rows of numbers (`wire.ts`). At 50 seasons with 16 teams, the history is about 80 KB and one season's totals about 4 KB.
 - **League files.** These store the season totals packed too: about 255 KB at 50 seasons.
 - **Replays.** Around 60 KB each, sent only on request (`getFight`), and kept for the current season.
@@ -54,7 +55,7 @@ Only equipment whose description has an `[attuned: …]` part can be attuned to.
 
 Status effects: frozen (slower, cooldowns at half speed), burning (5 damage a second; setting someone on fire again only refreshes it), asleep (doesn't move or act until taking damage; enemies leave sleepers for last), taunted (can only attack the taunter), scared (runs from whoever scared them and doesn't attack), and hyped (+3 stars to all stats). All but hyped are negative. If everyone standing is asleep, they all wake up.
 
-Overtime: from 30s into a fight, everyone standing loses half a star of toughness every 5s, so fights can't stall (with healing, say).
+Overtime: from 30s into a fight, everyone standing loses half a star of toughness every 5s, so fights can't stall (with healing, say). Fights stop at 2 minutes regardless.
 
 To add equipment, add the display entry in `catalog.ts`, its behavior in `sim/behaviors.ts`, and images named after the key in kebab case under `static/mm/equipment/` (worn) and `static/mm/icons/` (shown in cards). If the effect is an attack or stat change, declare it as `attack` or `statMods` and the valuation handles it. For anything else, add `value` hints saying what it amounts to: extra damage per second, extra HP, a share of hits blocked, stats gained on average, hype for teammates, or a support action (see `ValueHints` in `sim/behaviors.ts`).
 

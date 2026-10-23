@@ -46,6 +46,22 @@ export interface Equipment {
 	yearsOwned: number;
 	/** How many times it's been repaired. Each repair costs more than the last. */
 	timesRepaired: number;
+	/** What it's done in fights in finished seasons, if anything. This season's are in `itemLines`. */
+	totals?: ItemTotals;
+}
+
+/** What a piece of equipment has done in fights. Items only get these for things they can do. */
+export interface ItemTotals {
+	dmgDealt: number;
+	hpHealed: number;
+	dmgPrevented: number;
+	moneyEarned: number;
+}
+
+/** One piece of equipment's totals from one match. */
+export interface ItemStatLine extends ItemTotals {
+	equipmentId: number;
+	matchId: number;
 }
 
 export type Decision = 'pending' | 'keep' | 'drop';
@@ -231,8 +247,8 @@ export interface LeagueHistoryWire {
 	careers: PackedRows;
 }
 
-/** What the server sends; the client unpacks `stats` into `statLines`. */
-export type MMViewpointWire = Omit<MMViewpoint, 'statLines'> & { stats: PackedRows };
+/** What the server sends; the client unpacks `stats` into `statLines` and `items` into `itemLines`. */
+export type MMViewpointWire = Omit<MMViewpoint, 'statLines' | 'itemLines'> & { stats: PackedRows; items: number[][] };
 
 export interface MMViewpoint {
 	pov: number;
@@ -246,6 +262,8 @@ export interface MMViewpoint {
 	bracket: Bracket | null;
 	/** This season's box scores, one line per fighter per match. */
 	statLines: StatLine[];
+	/** This season's equipment totals, one line per item per match it did something in. */
+	itemLines: ItemStatLine[];
 	/** Compare with a cached LeagueHistory to know when to ask for a new one. */
 	historyVersion: number;
 	private: MyTeamPrivate | null;
@@ -277,6 +295,10 @@ export type FightEvent =
 	| { type: 'animation'; fighter: number; updates: Partial<FighterVisual> }
 	| { type: 'projectile'; fighter: number; target: number; img: string }
 	| { type: 'text'; fighter: number; text: string; color?: string }
+	/** A landed hit on `fighter`, from `by`. */
+	| { type: 'hit'; fighter: number; by: number; damage: number }
+	/** `fighter` earned money for their team, from another team or (if null) from nowhere. */
+	| { type: 'money'; fighter: number; amount: number; from: TeamId | null }
 	| { type: 'particle'; fighter: number; img: string };
 
 export interface FightLog {

@@ -3,6 +3,7 @@
 
 import type {
 	Career,
+	ItemStatLine,
 	LeagueHistory,
 	LeagueHistoryWire,
 	PackedRows,
@@ -36,6 +37,22 @@ export function unpackStatLines(packed: PackedRows): StatLine[] {
 		kod,
 		dmgDealt,
 		dmgTaken
+	}));
+}
+
+/** [equipmentId, matchId, dmgDealt, hpHealed, dmgPrevented, moneyEarned] */
+export function packItemLines(lines: ItemStatLine[]): number[][] {
+	return lines.map((l) => [l.equipmentId, l.matchId, l.dmgDealt, l.hpHealed, l.dmgPrevented, l.moneyEarned]);
+}
+
+export function unpackItemLines(rows: number[][]): ItemStatLine[] {
+	return rows.map(([equipmentId, matchId, dmgDealt, hpHealed, dmgPrevented, moneyEarned]) => ({
+		equipmentId,
+		matchId,
+		dmgDealt,
+		hpHealed,
+		dmgPrevented,
+		moneyEarned
 	}));
 }
 

@@ -1,5 +1,5 @@
 export const TICK_LENGTH = 0.2; // seconds
-export const MAX_FIGHT_SECONDS = 300;
+export const MAX_FIGHT_SECONDS = 120;
 /** From this many seconds into a fight, everyone loses toughness every OVERTIME_INTERVAL seconds, so fights can't stall. */
 export const OVERTIME_START = 30;
 export const OVERTIME_INTERVAL = 5;

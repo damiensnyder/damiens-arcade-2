@@ -127,8 +127,8 @@ function freeze(target: BattleFighter, seconds: number): void {
 }
 
 /** Burning deals 5 damage a second (before toughness) for as long as it lasts. */
-function burn(target: BattleFighter, source: BattleFighter, seconds: number): void {
-	target.addEffect({ name: 'burning', remaining: seconds, negative: true, mods: {}, burn: 5, source, tint: [1, 0.5, 0, 0.35] });
+function burn(target: BattleFighter, item: BattleItem, seconds: number): void {
+	target.addEffect({ name: 'burning', remaining: seconds, negative: true, mods: {}, burn: 5, source: item.owner, sourceItem: item, tint: [1, 0.5, 0, 0.35] });
 }
 
 export const HYPE_MODS: Partial<Stats> = ALL_STATS(6);
@@ -221,18 +221,20 @@ function every(item: BattleItem, seconds: number, fn: () => void): void {
 	fn();
 }
 
-function heal(target: BattleFighter, amount: number): number {
+/** Heals the target, crediting `item` (if it's equipment). */
+function heal(target: BattleFighter, amount: number, item?: BattleItem): number {
 	const healed = Math.min(Math.round(amount), 100 - target.hp);
 	if (healed <= 0) return 0;
 	target.hp += healed;
+	target.fight.credit(item, 'hpHealed', healed);
 	target.log({ type: 'text', fighter: target.index, text: '+' + healed, color: '#9e9' });
 	target.log({ type: 'animation', fighter: target.index, updates: { hp: target.hp } });
 	return healed;
 }
 
-/** Damage that's reduced by the target's toughness, outside of a regular hit. */
-function zap(from: BattleFighter, target: BattleFighter, amount: number): void {
-	from.dealDamage(target, Math.ceil(amount * target.damageTakenMultiplier()), true);
+/** Damage from an item that's reduced by the target's toughness, outside of a regular hit. */
+function zap(item: BattleItem, target: BattleFighter, amount: number): void {
+	item.owner.dealDamage(target, Math.ceil(amount * target.damageTakenMultiplier()), true, item);
 }
 
 // ---- what effects amount to, for the valuation ----
@@ -274,7 +276,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		// burning doesn't stack, so hitting every 2.5s keeps it going: about half its 25 damage per hit
 		attack: { kind: 'melee', damage: [12, 20], cooldown: [2.5, 2.5], knockback: 1, lingering: 12.5 },
 		onHitDealt: (item, target, _damage, source) => {
-			if (source === item) burn(target, item.owner, 5);
+			if (source === item) burn(target, item, 5);
 		}
 	},
 	tranquilizerGun: {
@@ -297,7 +299,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		attack: { kind: 'ranged', damage: [20, 30], cooldown: [3, 3], knockback: 1, projectile: '/mm/projectiles/fireball.png', lingering: 20 },
 		onHitDealt: (item, target, _damage, source) => {
 			if (source !== item) return;
-			for (const e of item.owner.enemies()) if (e === target || e.distanceTo(target) <= 10) burn(e, item.owner, 5);
+			for (const e of item.owner.enemies()) if (e === target || e.distanceTo(target) <= 10) burn(e, item, 5);
 		}
 	},
 	cornDog: {
@@ -305,7 +307,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			priority: (item) => healValue(item.owner, 40, item.owner.actionTime(0, 2)),
 			perform: (item) => {
 				const f = item.owner;
-				heal(f, 40);
+				heal(f, 40, item);
 				f.setCooldown(Math.max(f.cooldown, 2));
 				f.removeItem(item);
 				f.log({ type: 'animation', fighter: f.index, updates: { equipment: f.wornKeys() } });
@@ -339,7 +341,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	fullSuitOfArmor: { statMods: (attuned) => ({ toughness: attuned ? 15 : 12, speed: -3 }) },
 	jellyhat: {
 		onHitTaken: (item, attacker, _damage, source) => {
-			if (source.behavior.attack?.kind === 'melee') zap(item.owner, attacker, item.attuned ? 15 : 10);
+			if (source.behavior.attack?.kind === 'melee') zap(item, attacker, item.attuned ? 15 : 10);
 		},
 		value: { dps: (attuned, ctx) => ((attuned ? 15 : 10) * ctx.hitsTaken) / TYPICAL_FIGHT_SECONDS }
 	},
@@ -405,7 +407,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			lingering: 25
 		},
 		onHitDealt: (item, target, _damage, source) => {
-			if (source === item) burn(target, item.owner, 5);
+			if (source === item) burn(target, item, 5);
 		}
 	},
 	zapHelmet: {
@@ -416,7 +418,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 				const target = f.nearestEnemy();
 				if (!target) return;
 				f.log({ type: 'projectile', fighter: f.index, target: target.index, img: '/mm/projectiles/laser.png' });
-				zap(f, target, item.attuned ? 20 : 15);
+				zap(item, target, item.attuned ? 20 : 15);
 			}),
 		value: { dps: (attuned) => (attuned ? 20 : 15) / 3 }
 	},
@@ -429,7 +431,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			every(item, 1, () => {
 				const f = item.owner;
 				for (const e of f.enemies()) {
-					if (f.distanceTo(e) <= MELEE_RANGE) zap(f, e, item.attuned ? 5 : 4);
+					if (f.distanceTo(e) <= MELEE_RANGE) zap(item, e, item.attuned ? 5 : 4);
 				}
 			}),
 		value: { dps: (attuned) => (attuned ? 5 : 4) * IN_MELEE }
@@ -450,6 +452,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			const f = item.owner;
 			if (f.hp <= 0 || teammate.hp > 0) return;
 			teammate.hp = 50;
+			f.fight.credit(item, 'hpHealed', 50);
 			f.removeItem(item);
 			f.log({ type: 'animation', fighter: f.index, updates: { equipment: f.wornKeys() } });
 			teammate.log({ type: 'animation', fighter: teammate.index, updates: { hp: teammate.hp } });
@@ -461,7 +464,8 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		onKo: (item, victim) => {
 			const f = item.owner;
 			const loot = f.fight.transferMoney(victim.team, f.team, item.attuned ? 4 : 2);
-			if (loot > 0) f.log({ type: 'text', fighter: f.index, text: `+$${loot}`, color: '#eeb' });
+			f.fight.credit(item, 'moneyEarned', loot);
+			if (loot > 0) f.log({ type: 'money', fighter: f.index, amount: loot, from: victim.team });
 		}
 	},
 	shrapnel: {
@@ -469,7 +473,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			const f = item.owner;
 			f.log({ type: 'particle', fighter: f.index, img: '/mm/damage.png' });
 			for (const other of f.fight.fighters) {
-				if (other !== f && other.hp > 0 && f.distanceTo(other) <= 10) zap(f, other, 40);
+				if (other !== f && other.hp > 0 && f.distanceTo(other) <= 10) zap(item, other, 40);
 			}
 		},
 		value: { dps: (_attuned, ctx) => (40 * Math.min(ctx.enemies, 2)) / TYPICAL_FIGHT_SECONDS }
@@ -479,7 +483,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			const f = item.owner;
 			for (const e of f.enemies()) {
 				const inRange = f.distanceTo(e) <= MELEE_RANGE ? 1 : 0;
-				if (inRange && !item.state[e.index]) zap(f, e, item.attuned ? 6 : 5);
+				if (inRange && !item.state[e.index]) zap(item, e, item.attuned ? 6 : 5);
 				item.state[e.index] = inRange;
 			}
 		},
@@ -519,7 +523,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 				if (!target) return;
 				f.charges -= 1;
 				f.setCooldown(CHARGED_COOLDOWN);
-				heal(target, amount);
+				heal(target, amount, item);
 			}
 		},
 		value: { action: (attuned, ctx) => ({ healing: (attuned ? 50 : 40) / (ctx.timeToCharge + CHARGED_COOLDOWN), busy: 1 }) }
@@ -585,7 +589,7 @@ export const ABILITY_BEHAVIORS: Record<string, Behavior> = {
 		onKo: (item) => {
 			const f = item.owner;
 			f.fight.transferMoney(null, f.team, 3);
-			f.log({ type: 'text', fighter: f.index, text: '+$3', color: '#eeb' });
+			f.log({ type: 'money', fighter: f.index, amount: 3, from: null });
 		}
 	},
 	lifesteal: {

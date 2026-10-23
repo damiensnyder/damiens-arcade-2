@@ -121,6 +121,7 @@
 						<div class="gear-text">
 							<div class="row between"><span>{EQUIPMENT[e.key]?.name}</span><span class="muted small">{slotsToString(EQUIPMENT[e.key]?.slots ?? [])} · {yearsLeft(e.yearsLeft)}</span></div>
 							<span class="small">{EQUIPMENT[e.key]?.description}</span>
+							{#if mm.equipmentLine(e)}<span class="muted small">{mm.equipmentLine(e)}</span>{/if}
 							{#if attunedTo(e.key)}<span class="muted small">attuned: {attunedTo(e.key)}</span>{/if}
 						</div>
 					</div>

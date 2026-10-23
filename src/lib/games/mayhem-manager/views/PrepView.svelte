@@ -78,6 +78,7 @@
 		{#each mine.equipment as e (e.id)}
 			{@const holder = holderOf(e)}
 			<EquipmentCard itemKey={e.key} imgSize={72} cls={holder ? 'mine' : ''}>
+				{#if mm.equipmentLine(e)}<p class="muted small">{mm.equipmentLine(e)}</p>{/if}
 				<label class="equip-to"
 					>equip to:
 					<select aria-label="Fighter to equip {EQUIPMENT[e.key]?.name} to" value={holder ? String(holder.id) : ''} onchange={(ev) => equip(e, ev.currentTarget.value)}>

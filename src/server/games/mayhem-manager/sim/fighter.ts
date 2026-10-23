@@ -17,6 +17,8 @@ export interface BattleItem {
 	/** Equipment catalog key, ability key, or 'fists'. */
 	key: string;
 	kind: 'equipment' | 'ability' | 'fists';
+	/** The team's equipment ID, so what the item does can be credited to it. */
+	equipmentId?: number;
 	behavior: Behavior;
 	attuned: boolean;
 	owner: BattleFighter;
@@ -37,6 +39,8 @@ export interface StatusEffect {
 	burn?: number;
 	/** Who caused it (for damage credit, or who a taunt points at). */
 	source?: BattleFighter;
+	/** The item that caused it, for crediting the item. */
+	sourceItem?: BattleItem;
 	tint: Tint;
 	/** Seconds since the last burn. */
 	timer?: number;
@@ -95,7 +99,7 @@ export class BattleFighter {
 	kos = 0;
 	kod = 0;
 
-	constructor(fight: Fight, fighter: Fighter, equipmentKeys: string[], team: TeamId) {
+	constructor(fight: Fight, fighter: Fighter, equipmentKeys: string[], team: TeamId, equipmentIds: number[] = []) {
 		this.fight = fight;
 		this.team = team;
 		this.fighterId = fighter.id;
@@ -113,11 +117,11 @@ export class BattleFighter {
 		this.items = [item('fists', 'fists', FISTS)];
 		const ability = ABILITY_BEHAVIORS[fighter.ability];
 		if (ability && Object.keys(ability).length > 0) this.items.push(item(fighter.ability, 'ability', ability));
-		for (const key of equipmentKeys) {
+		equipmentKeys.forEach((key, i) => {
 			const behavior = EQUIPMENT_BEHAVIORS[key];
-			if (fighter.ability === 'refusesUnattuned' && !fighter.attunements.includes(key)) continue;
-			if (behavior) this.items.push(item(key, 'equipment', behavior));
-		}
+			if (fighter.ability === 'refusesUnattuned' && !fighter.attunements.includes(key)) return;
+			if (behavior) this.items.push({ ...item(key, 'equipment', behavior), equipmentId: equipmentIds[i] });
+		});
 	}
 
 	/** Gives the fighter an ability mid-fight (it starts the fight as if they'd always had it). */
@@ -276,6 +280,11 @@ export class BattleFighter {
 
 	/** Start-of-tick upkeep: effects wear off, cooldowns tick down, passive abilities trigger. */
 	upkeep(): void {
+		// a swing or shot shows for one tick, then the fighter stands back up (even if they don't move)
+		if (this.hp > 0 && this.pose === Pose.ForwardSwing) {
+			this.pose = Pose.Stationary1;
+			this.log({ type: 'animation', fighter: this.index, updates: { rotation: this.pose } });
+		}
 		if (this.flash > 0) {
 			this.flash = Math.max(this.flash - 0.75, 0);
 			this.log({ type: 'animation', fighter: this.index, updates: { flash: this.flash } });
@@ -296,7 +305,7 @@ export class BattleFighter {
 			effect.timer = (effect.timer ?? 0) + TICK_LENGTH;
 			if (effect.timer < 1 - EPSILON) continue;
 			effect.timer = 0;
-			(effect.source ?? this).dealDamage(this, Math.ceil(effect.burn * this.damageTakenMultiplier()));
+			(effect.source ?? this).dealDamage(this, Math.ceil(effect.burn * this.damageTakenMultiplier()), false, effect.sourceItem);
 		}
 		const newTint = this.tint();
 		if (statsChanged || newTint.some((x, i) => x !== oldTint[i])) {
@@ -478,9 +487,12 @@ export class BattleFighter {
 		for (const item of this.items) rawDamage *= item.behavior.damageMultiplier?.(item, target) ?? 1;
 		const damage = Math.ceil(rawDamage * (scaled ? target.damageTakenMultiplier() : 1));
 		for (const item of [...target.items]) {
-			if (item.behavior.preventHit?.(item, this, damage)) return;
+			if (item.behavior.preventHit?.(item, this, damage)) {
+				this.fight.credit(item, 'dmgPrevented', Math.min(damage, Math.max(target.hp, 0)));
+				return;
+			}
 		}
-		this.dealDamage(target, damage, true);
+		this.dealDamage(target, damage, true, source);
 		if (target.hp > 0 && knockback > 0) {
 			const [dx, dy] = scaleVector(target.x - this.x, target.y - this.y, knockback);
 			const cos = Math.cos(KNOCKBACK_ROTATION);
@@ -491,21 +503,27 @@ export class BattleFighter {
 		for (const item of [...this.items]) item.behavior.onHitDealt?.(item, target, damage, source);
 	}
 
-	/** Takes HP off a target and keeps the box score. Damage is not scaled by toughness here. */
-	dealDamage(target: BattleFighter, amount: number, isHit = false): void {
+	/**
+	 * Takes HP off a target and keeps the box score, crediting `item` (if it's equipment) with
+	 * damage to enemies. Damage is not scaled by toughness here.
+	 */
+	dealDamage(target: BattleFighter, amount: number, isHit = false, item?: BattleItem): void {
 		if (target.hp <= 0 || amount <= 0) return;
 		const dealt = Math.min(amount, target.hp);
 		target.hp -= amount;
 		this.dmgDealt += dealt;
 		target.dmgTaken += dealt;
+		if (target.team !== this.team) this.fight.credit(item, 'dmgDealt', dealt);
 		if (isHit) target.flash = 1;
 		target.log({
 			type: 'animation',
 			fighter: target.index,
 			updates: isHit ? { hp: target.hp, flash: target.flash } : { hp: target.hp }
 		});
-		target.log({ type: 'text', fighter: target.index, text: String(amount) });
-		if (isHit) target.log({ type: 'particle', fighter: target.index, img: '/mm/damage.png' });
+		if (isHit) {
+			target.log({ type: 'hit', fighter: target.index, by: this.index, damage: amount });
+			target.log({ type: 'particle', fighter: target.index, img: '/mm/damage.png' });
+		}
 		if (target.hp > 0) target.removeEffect('asleep');
 		if (target.hp <= 0) {
 			if (target.team !== this.team) this.kos++;

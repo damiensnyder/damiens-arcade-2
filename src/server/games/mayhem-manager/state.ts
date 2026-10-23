@@ -8,6 +8,7 @@ import type {
 	Equipment,
 	ExpiringContract,
 	Fighter,
+	ItemStatLine,
 	FreeAgent,
 	Match,
 	Phase,
@@ -55,6 +56,8 @@ export interface LeagueState {
 	seasons: SeasonRecord[];
 	/** This season's box scores, one line per fighter per match (needed to hide unseen results). */
 	statLines: StatLine[];
+	/** This season's equipment totals, one line per item per match. Rolled into the items at season end. */
+	itemLines: ItemStatLine[];
 	/** Earlier seasons' box scores, rolled up to one line per fighter, team and season half. */
 	seasonStats: StatTotal[];
 	nextId: number;
@@ -96,12 +99,19 @@ const fighter = z.object({
 	isOwner: z.boolean().optional()
 });
 
+const itemNumbers = {
+	dmgDealt: z.number().nonnegative(),
+	hpHealed: z.number().nonnegative(),
+	dmgPrevented: z.number().nonnegative(),
+	moneyEarned: z.number().nonnegative()
+};
 const equipment = z.object({
 	id: nonneg,
 	key: equipmentKey,
 	yearsLeft: int,
 	yearsOwned: nonneg,
-	timesRepaired: nonneg.default(0)
+	timesRepaired: nonneg.default(0),
+	totals: z.object(itemNumbers).optional()
 });
 const decision = z.enum(['pending', 'keep', 'drop']);
 const plan = z.union([
@@ -192,6 +202,8 @@ export const leagueSchema = z.object({
 		z.object({ season: int.min(1), standings: z.array(standingRow), bracket, champion: teamId.nullable() })
 	),
 	statLines: z.array(z.object({ ...statNumbers, matchId: nonneg })),
+	// leagues saved before equipment had stats
+	itemLines: z.array(z.object({ ...itemNumbers, equipmentId: nonneg, matchId: nonneg })).default([]),
 	// league files store these packed (see wire.ts), since they grow every season
 	seasonStats: z.union([
 		z.array(z.object(statNumbers)),

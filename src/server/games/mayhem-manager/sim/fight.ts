@@ -1,13 +1,15 @@
-import type { FightEvent, Fighter, FighterVisual, TeamId } from '../../../../lib/games/mayhem-manager/types.js';
+import type { FightEvent, Fighter, FighterVisual, ItemTotals, TeamId } from '../../../../lib/games/mayhem-manager/types.js';
 import type { Rng } from '../rng.js';
 import { ARENA_SIZE, START_INSET, CROWDING_DISTANCE, MAX_FIGHT_SECONDS, OVERTIME_INTERVAL, OVERTIME_START, OVERTIME_TOUGHNESS_LOSS, TICK_LENGTH } from './constants.js';
 import { roundStats } from '../public.js';
-import { BattleFighter, round2, scaleVector } from './fighter.js';
+import { BattleFighter, round2, scaleVector, type BattleItem } from './fighter.js';
 
 export interface Combatant {
 	fighter: Fighter;
 	/** Equipment catalog keys. */
 	equipment: string[];
+	/** The equipment's IDs, in the same order, to credit each item with what it does. */
+	equipmentIds?: number[];
 	team: TeamId;
 }
 
@@ -31,6 +33,8 @@ export interface FightOutcome {
 	fighters: FighterOutcome[];
 	/** How much each team's money changed during the fight (from looting and the like). */
 	moneyChange: Map<TeamId, number>;
+	/** What each piece of equipment did, for those that did something. */
+	items: (ItemTotals & { equipmentId: number })[];
 }
 
 export class Fight {
@@ -43,6 +47,7 @@ export class Fight {
 	private fightTicks = 0;
 	private readonly money: Map<TeamId, number>;
 	private readonly moneyChange = new Map<TeamId, number>();
+	private readonly itemTotals = new Map<number, ItemTotals>();
 
 	constructor(rng: Rng, combatants: Combatant[], logging: boolean, money = new Map<TeamId, number>()) {
 		this.rng = rng;
@@ -55,7 +60,7 @@ export class Fight {
 		while (queues.some((q) => q.length > 0)) {
 			for (const q of queues) {
 				const c = q.shift();
-				if (c) this.fighters.push(new BattleFighter(this, c.fighter, c.equipment, c.team));
+				if (c) this.fighters.push(new BattleFighter(this, c.fighter, c.equipment, c.team, c.equipmentIds));
 			}
 		}
 		this.fighters.forEach((f, i) => (f.index = i));
@@ -180,6 +185,17 @@ export class Fight {
 		return moved;
 	}
 
+	/** Adds to an item's totals, if it's a piece of the team's equipment. */
+	credit(item: BattleItem | undefined, stat: keyof ItemTotals, amount: number): void {
+		if (item?.equipmentId === undefined || amount <= 0) return;
+		let totals = this.itemTotals.get(item.equipmentId);
+		if (!totals) {
+			totals = { dmgDealt: 0, hpHealed: 0, dmgPrevented: 0, moneyEarned: 0 };
+			this.itemTotals.set(item.equipmentId, totals);
+		}
+		totals[stat] += amount;
+	}
+
 	/** Runs knockout effects: the victim's own (like shrapnel), the attacker's, then teammates' (like a halo). */
 	knockedOut(victim: BattleFighter, by: BattleFighter): void {
 		for (const item of [...victim.items]) item.behavior.onKnockedOut?.(item, by);
@@ -243,6 +259,7 @@ export class Fight {
 		return {
 			ticks: this.ticks,
 			moneyChange: this.moneyChange,
+			items: [...this.itemTotals].map(([equipmentId, totals]) => ({ equipmentId, ...totals })),
 			winner: ranked[0],
 			standing,
 			fighters: this.fighters.map((f) => ({

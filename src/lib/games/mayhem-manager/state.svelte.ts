@@ -1,9 +1,12 @@
 import type { MMAction } from './actions.js';
 import { computeStandings, playoffRoundCount, playoffSize, regularSeasonWeeks } from './rules.js';
 import type {
+	Equipment,
 	Fighter,
 	FightLog,
 	FreeAgent,
+	ItemStatLine,
+	ItemTotals,
 	LeagueHistory,
 	Match,
 	MMPrivateEvent,
@@ -17,7 +20,7 @@ import type {
 	TeamId,
 	TeamView
 } from './types.js';
-import { unpackHistory, unpackStatLines, unpackTotals } from './wire.js';
+import { unpackHistory, unpackItemLines, unpackStatLines, unpackTotals } from './wire.js';
 
 export type Tab = 'phase' | 'league' | 'team' | 'history';
 
@@ -73,8 +76,8 @@ export class MMState {
 	}
 
 	applyGamestate(wire: MMViewpointWire): void {
-		const { stats, ...rest } = wire;
-		const vp: MMViewpoint = { ...rest, statLines: unpackStatLines(stats) };
+		const { stats, items, ...rest } = wire;
+		const vp: MMViewpoint = { ...rest, statLines: unpackStatLines(stats), itemLines: unpackItemLines(items) };
 		const prev = this.vp;
 		const before = this.myCurrentMatch();
 		this.vp = vp;
@@ -204,6 +207,17 @@ export class MMState {
 		if (!vp) return [];
 		const byId = new Map(vp.matches.map((m) => [m.id, m]));
 		return vp.statLines.filter((l) => {
+			const m = byId.get(l.matchId);
+			return !m || this.isRevealed(m);
+		});
+	}
+
+	/** Equipment totals from matches the viewer has seen. */
+	get visibleItemLines(): ItemStatLine[] {
+		const vp = this.vp;
+		if (!vp) return [];
+		const byId = new Map(vp.matches.map((m) => [m.id, m]));
+		return vp.itemLines.filter((l) => {
 			const m = byId.get(l.matchId);
 			return !m || this.isRevealed(m);
 		});
@@ -362,6 +376,24 @@ export class MMState {
 		let text = `${fights} fight${fights === 1 ? '' : 's'} · ${kos} KO${kos === 1 ? '' : 's'}`;
 		if (withDamage) text += ` · ${Math.round(dmg)} damage dealt`;
 		return text;
+	}
+
+	/** "312 damage dealt · 40 HP healed" over the item's time on its team, or '' if it hasn't done any of that. */
+	equipmentLine(e: Equipment): string {
+		const t: ItemTotals = { dmgDealt: 0, hpHealed: 0, dmgPrevented: 0, moneyEarned: 0, ...e.totals };
+		for (const l of this.visibleItemLines) {
+			if (l.equipmentId !== e.id) continue;
+			t.dmgDealt += l.dmgDealt;
+			t.hpHealed += l.hpHealed;
+			t.dmgPrevented += l.dmgPrevented;
+			t.moneyEarned += l.moneyEarned;
+		}
+		const parts: string[] = [];
+		if (t.dmgDealt > 0) parts.push(`${Math.round(t.dmgDealt)} damage dealt`);
+		if (t.hpHealed > 0) parts.push(`${Math.round(t.hpHealed)} HP healed`);
+		if (t.dmgPrevented > 0) parts.push(`${Math.round(t.dmgPrevented)} damage prevented`);
+		if (t.moneyEarned > 0) parts.push(`$${Math.round(t.moneyEarned)} earned`);
+		return parts.join(' · ');
 	}
 
 	/** "3 seasons · 12 fights · 9 KOs", combining the history with what the viewer has seen this season. */
