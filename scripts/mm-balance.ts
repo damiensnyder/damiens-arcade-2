@@ -14,6 +14,7 @@ import { contractWorth, fighterWorth } from '../src/server/games/mayhem-manager/
 import { EQUIPMENT_BEHAVIORS, FISTS, ABILITY_BEHAVIORS } from '../src/server/games/mayhem-manager/sim/behaviors.js';
 import type { Fighter, Stats } from '../src/lib/games/mayhem-manager/types.js';
 import { Fight } from '../src/server/games/mayhem-manager/sim/fight.js';
+import { BattleFighter, type BattleItem } from '../src/server/games/mayhem-manager/sim/fighter.js';
 import { TICK_LENGTH } from '../src/server/games/mayhem-manager/sim/constants.js';
 import { STAT_NAMES } from '../src/lib/games/mayhem-manager/types.js';
 
@@ -47,8 +48,10 @@ interface Data {
 	star475: [number, number];
 	/** Primary stat of each team's best fighter. */
 	bestPrimary: Counts;
-	/** Primary attack kinds on rosters. */
-	primaryKinds: Counts;
+	/** What rostered fighters carry: no weapon, melee, ranged, aoe, or a mix ('melee+ranged'). */
+	weaponsHeld: Counts;
+	/** Landed hits in counted seasons by attack kind ('fists', 'melee', 'ranged', 'aoe'). */
+	hitsBy: Counts;
 	/** Fight length in seconds (rounded down to 5s), not counting the spawn-in. */
 	fightSeconds: Counts;
 }
@@ -61,6 +64,14 @@ const doTick = proto.doTick;
 proto.doTick = function (this: unknown) {
 	fightTicks++;
 	doTick.call(this);
+};
+// count landed hits by the kind of attack they came from
+let recordHit: ((kind: string) => void) | null = null;
+const fighterProto = BattleFighter.prototype as unknown as { hit: (target: unknown, source: BattleItem, ...rest: unknown[]) => void };
+const hit = fighterProto.hit;
+fighterProto.hit = function (this: unknown, target, source, ...rest) {
+	recordHit?.(source.kind === 'fists' ? 'fists' : (source.behavior.attack?.kind ?? 'other'));
+	hit.call(this, target, source, ...rest);
 };
 const simulate = proto.simulate;
 proto.simulate = function (this: unknown) {
@@ -92,7 +103,8 @@ function emptyData(): Data {
 		star35: [0, 0],
 		star475: [0, 0],
 		bestPrimary: {},
-		primaryKinds: {},
+		weaponsHeld: {},
+		hitsBy: {},
 		fightSeconds: {}
 	};
 }
@@ -134,6 +146,9 @@ function runLeague(teamCount: number, seasons: number, from: number, d: Data): v
 	let lastRecorded = 0;
 	recordFight = (seconds) => {
 		if (s().season >= from) inc(d.fightSeconds, Math.floor(seconds / 5) * 5);
+	};
+	recordHit = (kind) => {
+		if (s().season >= from) inc(d.hitsBy, kind);
 	};
 
 	for (let step = 0; step < seasons * 30; step++) {
@@ -225,7 +240,8 @@ function runLeague(teamCount: number, seasons: number, from: number, d: Data): v
 								inc(d.rosteredAges, f.age);
 								const keys = (t.lineup[f.id] ?? []).map((id) => keyOf.get(id)!).filter(Boolean);
 								const p = primaryStat(f, keys);
-								inc(d.primaryKinds, p.kind);
+								const kinds = new Set(keys.map((k) => EQUIPMENT_BEHAVIORS[k]?.attack).filter((a) => a && !a.singleUse).map((a) => a!.kind));
+								inc(d.weaponsHeld, kinds.size === 0 ? 'no weapon' : [...kinds].sort().join('+'));
 								bestPrimary = Math.max(bestPrimary, f.stats[p.stat]);
 							}
 							inc(d.bestPrimary, Math.round(bestPrimary));
@@ -278,8 +294,8 @@ function merge(a: Data, b: Data): Data {
 		out[k] = [a[k][0] + b[k][0], a[k][1] + b[k][1]];
 	}
 	out.signDays = a.signDays.map((x, i) => x + b.signDays[i]) as Data['signDays'];
-	for (const k of ['rosterSizes', 'equipmentCounts', 'offered', 'bought', 'rosteredAges', 'entryAges', 'exitAges', 'bestPrimary', 'primaryKinds', 'fightSeconds'] as const) {
-		addCounts(a[k], b[k], out[k]);
+	for (const k of ['rosterSizes', 'equipmentCounts', 'offered', 'bought', 'rosteredAges', 'entryAges', 'exitAges', 'bestPrimary', 'weaponsHeld', 'hitsBy', 'fightSeconds'] as const) {
+		addCounts(a[k] ?? {}, b[k] ?? {}, out[k]);
 	}
 	out.moneyAtFA = [...a.moneyAtFA, ...b.moneyAtFA];
 	for (const src of [a, b]) {
@@ -356,7 +372,8 @@ function report(d: Data): void {
 	console.log(`\n9. teams with a fighter at 3.5+ stars in their primary stat: ${pct(d.star35)}   [goal 80-95%]`);
 	console.log(`   ... at 4.75+ stars: ${pct(d.star475)}   [goal 20-40%]`);
 	console.log(`   best primary stat per team: ${distribution(d.bestPrimary)}`);
-	console.log(`   primary attacks on rosters: ${distribution(d.primaryKinds)}`);
+	console.log(`   rostered fighters carry: ${distribution(d.weaponsHeld)}`);
+	console.log(`   landed hits by attack: ${distribution(d.hitsBy)}`);
 	const fights = Object.values(d.fightSeconds).reduce((a, b) => a + b, 0);
 	const inRange = Object.entries(d.fightSeconds).filter(([k]) => Number(k) >= 15 && Number(k) < 40).reduce((a, [, v]) => a + v, 0);
 	console.log(`\n10. fights lasting 15-40s: ${((100 * inRange) / fights).toFixed(0)}% (n=${fights})   [goal 85%+]`);
