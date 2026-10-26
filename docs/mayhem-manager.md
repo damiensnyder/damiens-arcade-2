@@ -51,7 +51,7 @@ Leagues can run for dozens of seasons, so the data that grows is kept out of tho
 
 `docs/mm-catalog-plain.txt` is the source of truth for equipment and fighter abilities: names, slots, prices, descriptions and flavor text. `##` headings in it are just for grouping. After editing it, run `npm run check:mm-catalog`. It lists everything in the code that no longer matches the txt, plus anything missing battle behavior or images. Equipment and abilities are matched by name, so renaming one shows up as one removed and one added.
 
-Only equipment whose description has an `[attuned: …]` part can be attuned to. Picky fighters can't use weapons they aren't attuned to. Charging equipment, and any other action without a cooldown in its description, has a 1s cooldown. Equipment without art yet borrows another item's images (`PLACEHOLDER_ART` in `catalog.ts`).
+Only equipment whose description has an `[attuned: …]` part can be attuned to. Picky fighters can't use weapons they aren't attuned to. Charging equipment, and any other action without a cooldown in its description, has a 1s cooldown. Shorter cooldowns (Bandolier, Shorter Cooldowns) can't take any cooldown below 1s; charging up isn't a cooldown, so it isn't affected. Equipment without art yet borrows another item's images (`PLACEHOLDER_ART` in `catalog.ts`).
 
 Status effects: frozen (slower, cooldowns at half speed), burning (5 damage a second; setting someone on fire again only refreshes it), stunned (doesn't move or act), taunted (can only attack the taunter), scared (runs from whoever scared them and doesn't attack), hyped (+3 stars to all stats) and invisible (enemies can't pick them as a target, though area effects still hit). Hyped and invisible are positive; the rest are negative.
 

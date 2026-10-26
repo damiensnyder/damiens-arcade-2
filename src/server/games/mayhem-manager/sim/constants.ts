@@ -15,6 +15,8 @@ export const TYPICAL_FIGHT_SECONDS = 20;
 /** About how much damage one hit does, before toughness, for estimating how many hits a fighter takes. */
 export const TYPICAL_HIT = 25;
 export const INITIAL_COOLDOWN = 3;
+/** No attack or action's cooldown goes below this, however much it's shortened (charging up isn't a cooldown). */
+export const MIN_COOLDOWN = 1;
 export const KNOCKBACK_ROTATION = Math.PI / 12;
 export const EPSILON = 0.00001;
 

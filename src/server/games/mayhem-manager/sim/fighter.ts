@@ -6,6 +6,7 @@ import {
 	CROWDING_DISTANCE,
 	EPSILON,
 	INITIAL_COOLDOWN,
+	MIN_COOLDOWN,
 	KNOCKBACK_ROTATION,
 	MELEE_RANGE,
 	Pose,
@@ -241,7 +242,7 @@ export class BattleFighter {
 
 	/** Seconds per use of an attack, including charging (and aiming, which overlaps the cooldown). */
 	private cycleTime(option: AttackOption): number {
-		const cooldown = Math.max(option.cooldown - this.cooldownReduction(option.spec.kind !== 'melee'), TICK_LENGTH);
+		const cooldown = Math.max(option.cooldown - this.cooldownReduction(option.spec.kind !== 'melee'), MIN_COOLDOWN);
 		return Math.max(cooldown, option.spec.aim ?? 0) + option.charges * this.timeToCharge();
 	}
 
@@ -259,7 +260,7 @@ export class BattleFighter {
 
 	/** Seconds an item action takes: charging up to `chargesNeeded`, then its cooldown. */
 	actionTime(chargesNeeded: number, cooldown: number): number {
-		return this.timeToCharge() * Math.max(chargesNeeded - this.charges, 0) + Math.max(cooldown - this.cooldownReduction(), TICK_LENGTH);
+		return this.timeToCharge() * Math.max(chargesNeeded - this.charges, 0) + Math.max(cooldown - this.cooldownReduction(), MIN_COOLDOWN);
 	}
 
 	/** Works something out as if this fighter's stats were changed by `mods`. */
@@ -503,7 +504,7 @@ export class BattleFighter {
 
 	charge(): void {
 		this.charges += 1;
-		this.setCooldown(this.timeToCharge());
+		this.setCooldown(this.timeToCharge(), false, 0);
 		this.log({ type: 'particle', fighter: this.index, img: '/mm/charge.png' });
 		for (const item of [...this.items]) item.behavior.onCharge?.(item);
 	}
@@ -515,8 +516,9 @@ export class BattleFighter {
 		this.log({ type: 'animation', fighter: this.index, updates: { rotation: this.pose } });
 	}
 
-	setCooldown(seconds: number, ranged = false): void {
-		this.cooldown = Math.max(0, seconds - this.cooldownReduction(ranged));
+	/** Starts a cooldown, shortened by the fighter's cooldown reductions but no lower than `floor`. */
+	setCooldown(seconds: number, ranged = false, floor = MIN_COOLDOWN): void {
+		this.cooldown = Math.max(Math.min(floor, seconds), seconds - this.cooldownReduction(ranged));
 	}
 
 	// ---- hits and damage ----

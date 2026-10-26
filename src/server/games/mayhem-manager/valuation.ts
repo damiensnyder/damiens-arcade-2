@@ -18,7 +18,7 @@
 import { MAX_STAT, averageIncrease } from '../../../lib/games/mayhem-manager/rules.js';
 import { STAT_NAMES, type Fighter, type Stats } from '../../../lib/games/mayhem-manager/types.js';
 import { ABILITY_BEHAVIORS, EQUIPMENT_BEHAVIORS, FISTS, HYPE_MODS, attackStats, type Behavior, type ValueContext } from './sim/behaviors.js';
-import { ARENA_SIZE, INITIAL_COOLDOWN, MELEE_RANGE, START_INSET, TICK_LENGTH, TYPICAL_FIGHT_SECONDS, TYPICAL_HIT } from './sim/constants.js';
+import { ARENA_SIZE, INITIAL_COOLDOWN, MELEE_RANGE, MIN_COOLDOWN, START_INSET, TYPICAL_FIGHT_SECONDS, TYPICAL_HIT } from './sim/constants.js';
 
 /** Global constants, fitted to simulated fights. Exported so the fitting script can vary them. */
 export const TUNING = {
@@ -170,7 +170,7 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 			const { cooldown, charges } = stats;
 			const damage = spec.planDamage?.(part.attuned, ctx) ?? stats.damage;
 			const reduction = cooldownReduction + (spec.kind === 'melee' ? 0 : rangedCooldownReduction);
-			const cycle = Math.max(cooldown - reduction, TICK_LENGTH, spec.aim ?? 0) + charges * timeToCharge;
+			const cycle = Math.max(cooldown - reduction, MIN_COOLDOWN, spec.aim ?? 0) + charges * timeToCharge;
 			const strength = Math.max(0.5 + 0.1 * s[spec.scalesWith ?? 'strength'], 0.25);
 			const hitChance = Math.max(0, Math.min(0.25 + 0.05 * s.accuracy, 1));
 			const share = uptime(Math.max(INITIAL_COOLDOWN, spec.kind === 'melee' ? approach : 0) + charges * timeToCharge);

@@ -3,19 +3,14 @@
 ## Melee weapons
 
 Battle Axe
-two-handed, $40
+two-handed, $42
 Melee. Deals 70 [attuned: 90] damage. Cooldown 4.5s.
 learn this secret trick lumberjacks DON'T want you to know
 
 Diamond Sword
-hand, $37
+hand, $40
 Melee. Deals 50 [attuned: 65] damage. Cooldown 3s.
 Durability: 858/1561; Bane of Arthropods IV
-
-Cast Iron Pan
-two-handed, $25
-Melee. Deals 20 damage. On hit: Permanently increase this weapon's damage by 1. Cooldown 5s.
-make sure to season it after use
 
 Rapier
 hand, $24
@@ -34,8 +29,13 @@ two-handed, $21
 Melee. Deals 30 [attuned: 35] damage. Cooldown 3.5s. On hit: Knock the target 20m away.
 batter up!
 
+Cast Iron Pan
+two-handed, $20
+Melee. Deals 20 damage. On hit: Permanently increase this weapon's damage by 1. Cooldown 5s.
+make sure to season after use
+
 The Ratio-Inator
-hand, $20
+hand, $18
 Melee. All hits reduce the target's HP by 1/3 [attuned: 1/2]. Cooldown 2.5s.
 hold this.
 
@@ -60,7 +60,7 @@ hand, $12
 Melee. Deals 10 damage for every $8 [attuned: $6] your team has. Cooldown 3s.
 
 Headbutter's Delight
-head, $11
+head, $10
 Melee. Deals 20 [attuned: 25] damage. Damage scales with toughness instead of strength. Cooldown 3s.
 
 ## Ranged weapons
@@ -74,20 +74,20 @@ hand, $36
 Ranged. Deals 40 [attuned: 50] damage. Cooldown 2s.
 
 Wand of the Great Pyromaniac
-hand, $35
+hand, $31
 Ranged. Deals 50 [attuned: 60] damage to all enemies and sets them on fire. Requires 3 charges.
 the Great Pyromaniac might have been a little *too* great
 
 Sniper Rifle
-two-handed, $34
+two-handed, $26
 Ranged. Deals 120 damage. Cooldown 2s. Must stand still for 4s before each shot.
 
 Tranquilizer Gun
-hand, $32
+hand, $24
 Ranged. Deals 10 damage. Cooldown 4s. On hit: Target is stunned for 5s.
 
 Ray Gun
-hand, $25
+hand, $23
 Ranged. Deals 70 [attuned: 85] damage. Requires 1 charge.
 
 Flare Gun
@@ -100,25 +100,25 @@ Ranged. Deals 50 [attuned: 65] damage. Cooldown 5s.
 
 Snowman Head
 head, $9
-Ranged. Deals 12 damage. Cooldown 1.5s. On hit dealt: Freeze the target for 1s [attuned: 2s].
+Ranged. Deals 12 damage. Cooldown 1.5s. On hit dealt: Freeze the target for 2s [attuned: 3s].
 
 ## Single-use
 
 Halo
-head, $25
+head, $35
 When a teammate is KO'd, revive them at 30% HP. Remove Halo.
 
-Invisibility Potion
-hand, $23
-Single-use. Turn invisible for 8s.
-
 Flamingo Floaty
-legs, $18
+legs, $21
 On hit taken: Prevent all damage. Remove Flamingo Floaty.
 *pop!*
 
+Invisibility Potion
+hand, $20
+Single-use. Turn invisible for 8s.
+
 Flashbang
-hand, $15
+hand, $11
 Single-use. Ranged. On hit: Stun all enemies within 10m of the target for 5s.
 
 Corn Dog
@@ -133,15 +133,23 @@ hand, $17
 Heal a teammate for 40 [attuned: 50] HP. Requires 1 charge.
 
 Foam Finger
-hand, $12
+hand, $15
 Make all teammates hyped for 6s [attuned: 8s]. Requires 1 charge.
 rah rah rah! go team go
 
 Leaf Blower
-two-handed, $7
-Blow all enemies within 10m back 15m. Cooldown 2s.
+two-handed, $6
+Blow all enemies within 10m back another 15m. Cooldown 2s.
 
 ## Stat changes
+
+Devil Horns
+head, $28
+-3 toughness. +3 [attuned: +4] to all other stats.
+
+Cardboard Cutout
+hand, $27
+When the fight starts, summon a decoy.
 
 Full Suit of Armor
 head, torso, legs, feet, $24
@@ -153,17 +161,9 @@ torso, $22
 +0.5 to all stats for each other teammate still standing.
 teamwork? i sure hope it does!
 
-Devil Horns
-head, $20
--3 toughness. +3 [attuned: +4] to all other stats.
-
 House Arrest Ankle Bracelet
 feet, $19
 +2 to all stats. Must stay within 5m of starting position.
-
-Cardboard Cutout
-hand, $16
-When the fight starts, summon a decoy.
 
 Viking Helmet
 head, $11
@@ -180,18 +180,14 @@ it's just so aerodynamic
 
 ## Passive effects
 
+Shield
+hand, $30
+50% chance to block hits when facing the attacker.
+
 Frilly Skirt
 legs, $26
 Makes opponents much less likely to target the wearer.
 you wouldn't hit someone in a frilly little skirt, would you?
-
-Shield
-hand, $25
-50% chance to block hits when facing the attacker.
-
-Zap Helmet
-head, $20
-On charge: Deal 25 [attuned: 30] damage to the nearest enemy fighter.
 
 Shirt of Many Belts
 torso, $19
@@ -227,17 +223,21 @@ Censored Bar
 legs, $14
 Wearer is immune to negative status effects.
 
+Zap Helmet
+head, $13
+On charge: Deal 30 [attuned: 40] damage to the nearest enemy fighter.
+
 Shrapnel
 head, $13
 When KO'd: Deal 40 damage to ALL fighters within 10m.
 
+Bandolier
+torso, $12
+Ranged cooldowns are 1s shorter.
+
 Jorts of Power
 legs, $12
 Every 5s [attuned: 4s], gain +0.5 strength.
-
-Bandolier
-torso, $12
-Ranged cooldowns are 0.6s shorter.
 
 Battery Pack
 torso, $11
@@ -285,10 +285,6 @@ On hit dealt: Gain 0.5 strength.
 Enrage, $13
 On hit taken: Gain 1 strength.
 
-Pep Talk, $11
-Teammates start each fight hyped for 4s.
-delivers quite the pep talk
-
 Brand Ambassador, $10
 On KO: Team gains $3.
 it's called being a "brand ambassador"
@@ -296,8 +292,15 @@ it's called being a "brand ambassador"
 Status Immunity, $10
 Immune to negative status effects.
 
+Pep Talk, $9
+Teammates start each fight hyped for 3s.
+delivers quite the pep talk
+
 Lone Wolf, $8
 +3 to all stats when all other teammates are downed.
+
+Opportunist, $8
+Deals double damage to targets with a negative status effect.
 
 Shorter Cooldowns, $7
 All cooldowns are 0.2s shorter.
@@ -311,9 +314,6 @@ All enemies within 10m are taunted.
 
 Mentor, $6
 After each training camp, gives a younger teammate +0.5 stars to a random stat.
-
-Opportunist, $6
-Deals double damage to targets with a negative status effect.
 
 Random Ability, $4
 Starts each fight with a random ability.
@@ -329,11 +329,11 @@ No Attunement, -$3
 Can't attune to equipment.
 was held back a couple grades as well
 
-Picky, -$10
+Picky, -$9
 Refuses to use unattuned weapons.
 
 Inattentive, -$12
-Starts each fight stunned for 3s.
+Starts each fight stunned for 4s.
 oh shoot, we're fighting already?
 
 Coward, -$13
