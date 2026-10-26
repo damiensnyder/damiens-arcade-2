@@ -311,6 +311,9 @@ function hypeAction(seconds: number, ctx: ValueContext): { hype: number; busy: n
 	return { hype: (seconds / (seconds + cycle)) * started, busy: cycle / (seconds + cycle) };
 }
 
+/** What a cast iron pan's hit is worth beyond its damage, for planning: the damage it adds to later fights. */
+const PAN_SEASONING_VALUE = 10;
+
 export const FISTS: Behavior = {
 	attack: { kind: 'melee', damage: [12, 12], cooldown: [2.4, 2.4], knockback: 1 }
 };
@@ -589,6 +592,21 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			}
 		},
 		value: { action: (attuned, ctx) => hypeAction(attuned ? 8 : 6, ctx) }
+	},
+	castIronPan: {
+		attack: {
+			kind: 'melee',
+			// typical: it's had some seasoning
+			damage: [25, 25],
+			cooldown: [5, 5],
+			knockback: 2,
+			damageAt: (item) => 20 + item.growth,
+			// each hit makes it better for good, so it's worth swinging even when fists would do as well
+			effectValue: () => PAN_SEASONING_VALUE
+		},
+		onHitDealt: (item, _target, _damage, source) => {
+			if (source === item) item.owner.fight.grow(item, 1);
+		}
 	},
 	rapier: { attack: { kind: 'melee', damage: [40, 50], cooldown: [3, 3], knockback: 1.5, scalesWith: 'accuracy' } },
 	taser: {

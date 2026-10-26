@@ -10,6 +10,8 @@ export interface Combatant {
 	equipment: string[];
 	/** The equipment's IDs, in the same order, to credit each item with what it does. */
 	equipmentIds?: number[];
+	/** Damage each piece has gained for good (see Equipment.growth), in the same order. */
+	equipmentGrowth?: number[];
 	team: TeamId;
 }
 
@@ -35,6 +37,8 @@ export interface FightOutcome {
 	moneyChange: Map<TeamId, number>;
 	/** What each piece of equipment did, for those that did something. */
 	items: (ItemTotals & { equipmentId: number })[];
+	/** Damage each piece of equipment gained for good during the fight, for those that did. */
+	growth: Map<number, number>;
 }
 
 export class Fight {
@@ -48,6 +52,7 @@ export class Fight {
 	private readonly money: Map<TeamId, number>;
 	private readonly moneyChange = new Map<TeamId, number>();
 	private readonly itemTotals = new Map<number, ItemTotals>();
+	private readonly growth = new Map<number, number>();
 
 	constructor(rng: Rng, combatants: Combatant[], logging: boolean, money = new Map<TeamId, number>()) {
 		this.rng = rng;
@@ -60,7 +65,7 @@ export class Fight {
 		while (queues.some((q) => q.length > 0)) {
 			for (const q of queues) {
 				const c = q.shift();
-				if (c) this.fighters.push(new BattleFighter(this, c.fighter, c.equipment, c.team, c.equipmentIds));
+				if (c) this.fighters.push(new BattleFighter(this, c.fighter, c.equipment, c.team, c.equipmentIds, null, c.equipmentGrowth));
 			}
 		}
 		this.fighters.forEach((f, i) => (f.index = i));
@@ -216,6 +221,12 @@ export class Fight {
 		totals[stat] += amount;
 	}
 
+	/** Makes an item permanently stronger, if it's a piece of the team's equipment. */
+	grow(item: BattleItem, amount: number): void {
+		item.growth += amount;
+		if (item.equipmentId !== undefined) this.growth.set(item.equipmentId, (this.growth.get(item.equipmentId) ?? 0) + amount);
+	}
+
 	/** Runs knockout effects: the victim's own (like shrapnel), the attacker's, then teammates' (like a halo). */
 	knockedOut(victim: BattleFighter, by: BattleFighter): void {
 		for (const item of [...victim.items]) item.behavior.onKnockedOut?.(item, by);
@@ -280,6 +291,7 @@ export class Fight {
 		return {
 			ticks: this.ticks,
 			moneyChange: this.moneyChange,
+			growth: this.growth,
 			items: [...this.itemTotals].map(([equipmentId, totals]) => ({ equipmentId, ...totals })),
 			winner: ranked[0],
 			standing,

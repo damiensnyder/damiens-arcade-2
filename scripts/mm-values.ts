@@ -11,6 +11,11 @@
 //
 // Usage: npx tsx scripts/mm-values.ts [--snapshots 400] [--fights 16] [--workers 8] [--json out.json]
 //   [--dollars-per-logit 41.7]   use this scale instead of fitting one, to compare with an earlier run
+//   [--only item:castIronPan,ability:pepTalk]   measure just these (plus the control), in a few minutes
+//   [--growth 0,10,20]   measure items as if they'd already gained this much damage (a cast iron pan)
+//
+// With --only, the dollar scale can't be fitted from the whole catalog, so it defaults to the scale
+// from the last full run (DEFAULT_DOLLARS_PER_LOGIT); update that after a full run.
 
 import { fork } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -31,6 +36,8 @@ import { contractWorth } from '../src/server/games/mayhem-manager/valuation.js';
 interface Member {
 	fighter: Fighter;
 	keys: string[];
+	/** Damage items have gained for good, by key. */
+	growth?: Record<string, number>;
 }
 
 interface Snapshot {
@@ -43,7 +50,7 @@ type Experiment =
 	| { kind: 'control' }
 	| { kind: 'stat'; stat: StatName }
 	| { kind: 'ability'; key: string }
-	| { kind: 'item'; key: string; attuned: boolean }
+	| { kind: 'item'; key: string; attuned: boolean; growth?: number }
 	| { kind: 'body'; body: 'zero' | 'rookie' }
 	| { kind: 'fighter' };
 
@@ -73,6 +80,11 @@ const arg = (name: string, fallback: number) => {
 const SNAPSHOTS = arg('snapshots', 400);
 const FIGHTS = arg('fights', 16);
 const SELECT_FIGHTS = 4;
+/** $ per logit from the last full run (all of the catalog), for runs with --only. */
+const DEFAULT_DOLLARS_PER_LOGIT = 41.7;
+const listArg = (name: string): string[] | null => (args.includes('--' + name) ? args[args.indexOf('--' + name) + 1].split(',') : null);
+const ONLY = listArg('only');
+const GROWTH = (listArg('growth') ?? ['0']).map(Number);
 
 function seedFor(...parts: (string | number)[]): Rng {
 	// FNV-1a, four ways, so each experiment and snapshot gets its own reproducible stream
@@ -121,7 +133,12 @@ function collectSnapshots(count: number): Snapshot[] {
 
 function fight(a: Member[], b: Member[], money: number, rng: Rng): { aWon: boolean; margin: number } {
 	const side = (members: Member[], team: number, idOffset: number): Combatant[] =>
-		members.map((m) => ({ fighter: { ...m.fighter, id: m.fighter.id + idOffset }, equipment: m.keys, team }));
+		members.map((m) => ({
+			fighter: { ...m.fighter, id: m.fighter.id + idOffset },
+			equipment: m.keys,
+			equipmentGrowth: m.keys.map((k) => m.growth?.[k] ?? 0),
+			team
+		}));
 	const ca = side(a, 0, 0);
 	const cb = side(b, 1, 1_000_000);
 	// either side might spawn (and act) first
@@ -145,7 +162,7 @@ function meanMargin(a: Member[], b: Member[], money: number, rng: Rng, n: number
 }
 
 const copy = (members: Member[]): Member[] =>
-	members.map((m) => ({ fighter: structuredClone(m.fighter), keys: m.keys.slice() }));
+	members.map((m) => ({ fighter: structuredClone(m.fighter), keys: m.keys.slice(), growth: m.growth && { ...m.growth } }));
 
 /** `key` on this fighter, keeping whatever else they wear that still fits. */
 function wearing(keys: string[], key: string): string[] {
@@ -227,6 +244,7 @@ function runExperimentInner(exp: Experiment, snap: Snapshot, index: number): Res
 				const a = copy(base);
 				const m = a[j];
 				m.keys = wearing(m.keys, exp.key);
+				if (exp.growth) m.growth = { ...m.growth, [exp.key]: exp.growth };
 				m.fighter.attunements = m.fighter.attunements.filter((k) => k !== exp.key);
 				if (exp.attuned) m.fighter.attunements.push(exp.key);
 				return a;
@@ -280,18 +298,25 @@ async function main() {
 	const bySeason = new Map<number, number>();
 	for (const s of snapshots) bySeason.set(s.season, (bySeason.get(s.season) ?? 0) + 1);
 
-	const experiments: { name: string; exp: Experiment }[] = [
+	const all: { name: string; exp: Experiment }[] = [
 		{ name: 'control', exp: { kind: 'control' } },
 		...STAT_NAMES.map((stat) => ({ name: `stat:${stat}`, exp: { kind: 'stat', stat } as Experiment })),
 		...ABILITY_KEYS.filter((k) => k !== 'noAbilities').map((key) => ({ name: `ability:${key}`, exp: { kind: 'ability', key } as Experiment })),
-		...EQUIPMENT_KEYS.flatMap((key) => [
-			{ name: `item:${key}`, exp: { kind: 'item', key, attuned: false } as Experiment },
-			{ name: `item:${key}:attuned`, exp: { kind: 'item', key, attuned: true } as Experiment }
-		]),
+		...EQUIPMENT_KEYS.flatMap((key) =>
+			GROWTH.flatMap((growth) => {
+				const suffix = growth ? `+${growth}` : '';
+				const plain = { name: `item:${key}${suffix}`, exp: { kind: 'item', key, attuned: false, growth } as Experiment };
+				if (!EQUIPMENT[key].attunable) return [plain];
+				return [plain, { name: `item:${key}:attuned${suffix}`, exp: { kind: 'item', key, attuned: true, growth } as Experiment }];
+			})
+		),
 		{ name: 'body:zero', exp: { kind: 'body', body: 'zero' } },
 		{ name: 'body:rookie', exp: { kind: 'body', body: 'rookie' } },
 		{ name: 'fighter', exp: { kind: 'fighter' } }
 	];
+	const experiments = ONLY
+		? all.filter(({ name }) => name === 'control' || ONLY.some((o) => name === o || name.startsWith(o + ':') || name.startsWith(o + '+')))
+		: all;
 
 	const chunk = Math.ceil(snapshots.length / 8);
 	const tasks: Task[] = [];
@@ -340,10 +365,11 @@ async function main() {
 	});
 
 	// dollars: scale so the whole equipment catalog's value equals its total price
-	const items = summary.filter((s) => s.name.startsWith('item:') && !s.name.endsWith(':attuned'));
-	const totalPrice = items.reduce((sum, s) => sum + EQUIPMENT[s.name.slice(5)].price, 0);
+	const itemKey = (name: string) => name.split(':')[1].split('+')[0];
+	const items = summary.filter((s) => s.name.startsWith('item:') && !s.name.includes(':attuned') && !s.name.includes('+'));
+	const totalPrice = items.reduce((sum, s) => sum + EQUIPMENT[itemKey(s.name)].price, 0);
 	const totalValue = items.reduce((sum, s) => sum + Math.max(s.logit, 0), 0);
-	const dollarsPerLogit = arg('dollars-per-logit', totalPrice / totalValue);
+	const dollarsPerLogit = arg('dollars-per-logit', ONLY ? DEFAULT_DOLLARS_PER_LOGIT : totalPrice / totalValue);
 
 	const out = {
 		snapshots: snapshots.length,
@@ -353,13 +379,13 @@ async function main() {
 		seconds: (Date.now() - started) / 1000,
 		summary,
 		raw: Object.fromEntries(experiments.map(({ name }, i) => [name, { winRates: results[i].winRates, meta: results[i].meta }])),
-		fighterSamples: results[experiments.findIndex((e) => e.name === 'fighter')].samples
+		fighterSamples: results[experiments.findIndex((e) => e.name === 'fighter')]?.samples
 	};
 	const jsonPath = args.includes('--json') ? args[args.indexOf('--json') + 1] : null;
 	if (jsonPath) writeFileSync(jsonPath, JSON.stringify(out, null, 1));
 
 	const fmt = (s: (typeof summary)[number]) => {
-		const price = s.name.startsWith('item:') ? EQUIPMENT[s.name.split(':')[1]].price : null;
+		const price = s.name.startsWith('item:') ? EQUIPMENT[itemKey(s.name)].price : null;
 		return [
 			s.name.padEnd(34),
 			`${(s.winRate * 100).toFixed(1)}%`.padStart(7),

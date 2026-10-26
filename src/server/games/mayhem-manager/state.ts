@@ -112,7 +112,8 @@ const equipment = z.object({
 	yearsLeft: int,
 	yearsOwned: nonneg,
 	timesRepaired: nonneg.default(0),
-	totals: z.object(itemNumbers).optional()
+	totals: z.object(itemNumbers).optional(),
+	growth: nonneg.optional()
 });
 const decision = z.enum(['pending', 'keep', 'drop']);
 const plan = z.union([

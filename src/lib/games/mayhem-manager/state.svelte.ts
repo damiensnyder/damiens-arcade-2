@@ -389,6 +389,7 @@ export class MMState {
 			t.moneyEarned += l.moneyEarned;
 		}
 		const parts: string[] = [];
+		if (e.growth) parts.push(`+${e.growth} damage from seasoning`);
 		if (t.dmgDealt > 0) parts.push(`${Math.round(t.dmgDealt)} damage dealt`);
 		if (t.hpHealed > 0) parts.push(`${Math.round(t.hpHealed)} HP healed`);
 		if (t.dmgPrevented > 0) parts.push(`${Math.round(t.dmgPrevented)} damage prevented`);

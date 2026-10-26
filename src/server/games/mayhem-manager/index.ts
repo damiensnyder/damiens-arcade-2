@@ -696,15 +696,28 @@ export default class MayhemManager extends GameLogicHandler {
 	private playMatch(match: Match, a: TeamState, b: TeamState): void {
 		const combatants: Combatant[] = [];
 		for (const team of [a, b]) {
-			const keyOf = new Map(team.equipment.map((e) => [e.id, e.key]));
+			const byId = new Map(team.equipment.map((e) => [e.id, e]));
 			const lineup = sanitizeLineup(team.fighters, team.equipment, team.lineup);
 			for (const fighter of team.fighters) {
 				const ids = lineup[fighter.id] ?? [];
-				combatants.push({ fighter, equipment: ids.map((id) => keyOf.get(id)!), equipmentIds: ids, team: team.id });
+				const gear = ids.map((id) => byId.get(id)!);
+				combatants.push({
+					fighter,
+					equipment: gear.map((e) => e.key),
+					equipmentIds: ids,
+					equipmentGrowth: gear.map((e) => e.growth ?? 0),
+					team: team.id
+				});
 			}
 		}
 		const outcome = simulateFight(this.rng, combatants, true, new Map([a, b].map((t) => [t.id, t.money])));
-		for (const team of [a, b]) team.money = Math.max(0, team.money + (outcome.moneyChange.get(team.id) ?? 0));
+		for (const team of [a, b]) {
+			team.money = Math.max(0, team.money + (outcome.moneyChange.get(team.id) ?? 0));
+			for (const e of team.equipment) {
+				const grown = outcome.growth.get(e.id);
+				if (grown) e.growth = (e.growth ?? 0) + grown;
+			}
+		}
 		match.result = {
 			winner: outcome.winner,
 			standingA: outcome.standing.get(a.id) ?? 0,

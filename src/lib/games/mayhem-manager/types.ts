@@ -48,6 +48,8 @@ export interface Equipment {
 	timesRepaired: number;
 	/** What it's done in fights in finished seasons, if anything. This season's are in `itemLines`. */
 	totals?: ItemTotals;
+	/** Damage it's gained for good from being used (a cast iron pan's seasoning). */
+	growth?: number;
 }
 
 /** What a piece of equipment has done in fights. Items only get these for things they can do. */

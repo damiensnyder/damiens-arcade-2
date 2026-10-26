@@ -12,6 +12,11 @@ hand, $37
 Melee. Deals 50 [attuned: 65] damage. Cooldown 3s.
 Durability: 858/1561; Bane of Arthropods IV
 
+Cast Iron Pan
+two-handed, $25
+Melee. Deals 20 damage. On hit: Permanently increase this weapon's damage by 1. Cooldown 5s.
+make sure to season it after use
+
 Rapier
 hand, $24
 Melee. Deals 40 [attuned: 50] damage. Damage scales with accuracy instead of strength. Cooldown 3s.

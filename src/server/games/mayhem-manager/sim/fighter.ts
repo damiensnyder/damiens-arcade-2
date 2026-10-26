@@ -22,6 +22,8 @@ export interface BattleItem {
 	behavior: Behavior;
 	attuned: boolean;
 	owner: BattleFighter;
+	/** Damage it's gained for good from earlier fights and this one (see Equipment.growth). */
+	growth: number;
 	/** Scratch space for behaviors that need to remember things (like a timer). */
 	state: Record<string, number>;
 }
@@ -100,7 +102,15 @@ export class BattleFighter {
 	kos = 0;
 	kod = 0;
 
-	constructor(fight: Fight, fighter: Fighter, equipmentKeys: string[], team: TeamId, equipmentIds: number[] = [], summoner: BattleFighter | null = null) {
+	constructor(
+		fight: Fight,
+		fighter: Fighter,
+		equipmentKeys: string[],
+		team: TeamId,
+		equipmentIds: number[] = [],
+		summoner: BattleFighter | null = null,
+		equipmentGrowth: number[] = []
+	) {
 		this.fight = fight;
 		this.summoner = summoner;
 		this.team = team;
@@ -114,6 +124,7 @@ export class BattleFighter {
 			behavior,
 			attuned: fighter.attunements.includes(key),
 			owner: this,
+			growth: 0,
 			state: {}
 		});
 		// summons don't attack
@@ -123,13 +134,13 @@ export class BattleFighter {
 		equipmentKeys.forEach((key, i) => {
 			const behavior = EQUIPMENT_BEHAVIORS[key];
 			if (fighter.ability === 'refusesUnattuned' && behavior?.attack && !fighter.attunements.includes(key)) return;
-			if (behavior) this.items.push({ ...item(key, 'equipment', behavior), equipmentId: equipmentIds[i] });
+			if (behavior) this.items.push({ ...item(key, 'equipment', behavior), equipmentId: equipmentIds[i], growth: equipmentGrowth[i] ?? 0 });
 		});
 	}
 
 	/** Gives the fighter an ability mid-fight (it starts the fight as if they'd always had it). */
 	addAbility(key: string, behavior: Behavior): void {
-		const added: BattleItem = { key, kind: 'ability', behavior, attuned: false, owner: this, state: {} };
+		const added: BattleItem = { key, kind: 'ability', behavior, attuned: false, owner: this, growth: 0, state: {} };
 		this.items.push(added);
 		const mods = behavior.statMods?.(false);
 		if (mods) this.changeStats(mods);

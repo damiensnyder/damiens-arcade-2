@@ -42,6 +42,7 @@ function equipment(
 
 /** Equipment without its own art yet, and whose images it borrows meanwhile (from items worn in the same slots). */
 const PLACEHOLDER_ART: Record<string, string> = {
+	castIronPan: 'battleAxe',
 	rapier: 'diamondSword',
 	taser: 'shiv',
 	baseballBat: 'battleAxe',
@@ -82,6 +83,7 @@ const EQUIPMENT_LIST: EquipmentInfo[] = [
 	// melee weapons
 	equipment('battleAxe', 'Battle Axe', ['hand', 'hand'], 40, 'Melee. Deals 70 [attuned: 90] damage. Cooldown 4.5s.', "learn this secret trick lumberjacks DON'T want you to know"),
 	equipment('diamondSword', 'Diamond Sword', ['hand'], 37, 'Melee. Deals 50 [attuned: 65] damage. Cooldown 3s.', 'Durability: 858/1561; Bane of Arthropods IV'),
+	equipment('castIronPan', 'Cast Iron Pan', ['hand', 'hand'], 25, "Melee. Deals 20 damage. On hit: Permanently increase this weapon's damage by 1. Cooldown 5s.", 'make sure to season it after use'),
 	equipment('rapier', 'Rapier', ['hand'], 24, 'Melee. Deals 40 [attuned: 50] damage. Damage scales with accuracy instead of strength. Cooldown 3s.'),
 	equipment('rollerBlades', 'Roller Blades', ['feet'], 23, 'Melee. Deals 25 damage. Cooldown 4s. +2 [attuned: +3] speed.'),
 	equipment('taser', 'Taser', ['hand'], 22, 'Melee. Deals 25 damage. Requires 1 charge. On hit: Target is stunned for 2s [attuned: 3s].'),
