@@ -7,7 +7,7 @@
 	import FighterSprite from '../components/FighterSprite.svelte';
 	import MatchupHeader from '../components/MatchupHeader.svelte';
 	import StatRows from '../components/StatRows.svelte';
-	import { EQUIPMENT } from '../catalog.js';
+	import { EQUIPMENT, isWeapon } from '../catalog.js';
 	import { canWearTogether } from '../rules.js';
 	import type { MMState } from '../state.svelte.js';
 	import type { Equipment, Fighter } from '../types.js';
@@ -26,7 +26,7 @@
 		const others = (lineup[f.id] ?? []).filter((id) => id !== e.id).map(keyOf);
 		const fits = canWearTogether([...others, e.key]);
 		let note = '';
-		if (f.ability === 'refusesUnattuned' && !f.attunements.includes(e.key)) {
+		if (f.ability === 'refusesUnattuned' && isWeapon(e.key) && !f.attunements.includes(e.key)) {
 			return { disabled: true, label: f.name + ' (not attuned)' };
 		}
 		if (!fits) {

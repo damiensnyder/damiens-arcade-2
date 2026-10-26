@@ -10,6 +10,7 @@
 // with one set of fights and measured with a fresh set so lucky picks don't inflate the value.
 //
 // Usage: npx tsx scripts/mm-values.ts [--snapshots 400] [--fights 16] [--workers 8] [--json out.json]
+//   [--dollars-per-logit 41.7]   use this scale instead of fitting one, to compare with an earlier run
 
 import { fork } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
@@ -342,7 +343,7 @@ async function main() {
 	const items = summary.filter((s) => s.name.startsWith('item:') && !s.name.endsWith(':attuned'));
 	const totalPrice = items.reduce((sum, s) => sum + EQUIPMENT[s.name.slice(5)].price, 0);
 	const totalValue = items.reduce((sum, s) => sum + Math.max(s.logit, 0), 0);
-	const dollarsPerLogit = totalPrice / totalValue;
+	const dollarsPerLogit = arg('dollars-per-logit', totalPrice / totalValue);
 
 	const out = {
 		snapshots: snapshots.length,

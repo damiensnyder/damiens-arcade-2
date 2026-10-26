@@ -122,7 +122,7 @@ export class BattleFighter {
 		if (ability && Object.keys(ability).length > 0) this.items.push(item(fighter.ability, 'ability', ability));
 		equipmentKeys.forEach((key, i) => {
 			const behavior = EQUIPMENT_BEHAVIORS[key];
-			if (fighter.ability === 'refusesUnattuned' && !fighter.attunements.includes(key)) return;
+			if (fighter.ability === 'refusesUnattuned' && behavior?.attack && !fighter.attunements.includes(key)) return;
 			if (behavior) this.items.push({ ...item(key, 'equipment', behavior), equipmentId: equipmentIds[i] });
 		});
 	}
@@ -494,6 +494,7 @@ export class BattleFighter {
 		this.charges += 1;
 		this.setCooldown(this.timeToCharge());
 		this.log({ type: 'particle', fighter: this.index, img: '/mm/charge.png' });
+		for (const item of [...this.items]) item.behavior.onCharge?.(item);
 	}
 
 	private swing(start: Pose, windup: Pose): void {

@@ -44,7 +44,8 @@ function partsOf(fighter: Fighter, equipment: string[]): Part[] {
 	if (ability) parts.push({ key: fighter.ability, behavior: ability, attuned: false });
 	for (const key of new Set(equipment)) {
 		const behavior = EQUIPMENT_BEHAVIORS[key];
-		if (fighter.ability === 'refusesUnattuned' && !fighter.attunements.includes(key)) continue;
+		// picky fighters won't use unattuned weapons
+		if (fighter.ability === 'refusesUnattuned' && behavior?.attack && !fighter.attunements.includes(key)) continue;
 		if (behavior) parts.push({ key, behavior, attuned: fighter.attunements.includes(key) });
 	}
 	return parts;

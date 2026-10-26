@@ -108,6 +108,8 @@ export interface Behavior {
 	 */
 	action?: { priority: (item: BattleItem) => number; perform: (item: BattleItem) => void };
 	onFightStart?: (item: BattleItem) => void;
+	/** The wearer charged up (gained a charge by spending time on it). */
+	onCharge?: (item: BattleItem) => void;
 	/** Runs at the start of every tick while the wearer is standing. */
 	onTick?: (item: BattleItem) => void;
 	/** Return true to cancel the hit entirely. Runs before any damage is applied. */
@@ -184,9 +186,10 @@ function push(from: BattleFighter, target: BattleFighter, meters: number): void 
 /**
  * Taking an enemy out of the fight for a while (stunning, scaring), for planning: like dealing
  * the share of their effective HP that this is of how long they'd otherwise go on fighting. Only
- * time beyond what's left of the same effect counts.
+ * time beyond what's left of the same effect counts. Fitted with test fights: much higher and
+ * fighters stun instead of hitting with a better weapon; much lower and they never stun.
  */
-const DISABLE_PLANNING_SECONDS = 15;
+const DISABLE_PLANNING_SECONDS = 8;
 
 function disablePlanning(target: BattleFighter, effect: string, seconds: number): number {
 	// pushing someone away isn't a status effect, so immunity doesn't help
@@ -313,11 +316,11 @@ export const FISTS: Behavior = {
 };
 
 export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
-	battleAxe: { attack: { kind: 'melee', damage: [70, 90], cooldown: [4, 4], knockback: 3 } },
+	battleAxe: { attack: { kind: 'melee', damage: [70, 90], cooldown: [4.5, 4.5], knockback: 3 } },
 	bow: { attack: { kind: 'ranged', damage: [50, 65], cooldown: [5, 5], knockback: 1, projectile: '/mm/projectiles/arrow.png' } },
 	torch: {
 		// burning doesn't stack, so hitting every 2.5s keeps it going: about half its 25 damage per hit
-		attack: { kind: 'melee', damage: [12, 20], cooldown: [2.5, 2.5], knockback: 1, lingering: 12.5 },
+		attack: { kind: 'melee', damage: [12, 16], cooldown: [2.5, 2.5], knockback: 1, lingering: 12.5 },
 		onHitDealt: (item, target, _damage, source) => {
 			if (source === item) burn(target, item, 5);
 		}
@@ -329,12 +332,12 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			cooldown: [4, 4],
 			knockback: 0.5,
 			projectile: '/mm/projectiles/bullet.png',
-			effectValue: (_item, target) => disablePlanning(target, 'stunned', 4)
+			effectValue: (_item, target) => disablePlanning(target, 'stunned', 5)
 		},
 		onHitDealt: (item, target, _damage, source) => {
-			if (source === item) stun(target, 4);
+			if (source === item) stun(target, 5);
 		},
-		value: { dps: (_attuned, ctx) => stunValue(4, ctx) }
+		value: { dps: (_attuned, ctx) => stunValue(5, ctx) }
 	},
 	flareGun: {
 		// the target's burning, plus whoever's near them
@@ -360,7 +363,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	devilHorns: {
 		statMods: (attuned) => {
 			const bonus = attuned ? 8 : 6;
-			return { strength: bonus, accuracy: bonus, energy: bonus, speed: bonus, toughness: -4 };
+			return { strength: bonus, accuracy: bonus, energy: bonus, speed: bonus, toughness: -6 };
 		}
 	},
 	diamondSword: { attack: { kind: 'melee', damage: [50, 65], cooldown: [3, 3], knockback: 2 } },
@@ -395,7 +398,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		value: { stats: (attuned, ctx) => ({ strength: ((attuned ? 3 : 2) * ctx.hitsPerSecond * TYPICAL_FIGHT_SECONDS) / 2 }) }
 	},
 	rollerBlades: {
-		attack: { kind: 'melee', damage: [30, 30], cooldown: [4, 4], knockback: 2 },
+		attack: { kind: 'melee', damage: [25, 25], cooldown: [4, 4], knockback: 2 },
 		statMods: (attuned) => ({ speed: attuned ? 6 : 4 })
 	},
 	shield: {
@@ -429,13 +432,13 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		statMods: () => ({ toughness: 2 }),
 		onTick: (item) => {
 			const f = item.owner;
-			const bonus = 2 * Math.floor(Math.max(100 - f.hp, 0) / (item.attuned ? 20 : 25));
+			const bonus = 2 * Math.floor(Math.max(100 - f.hp, 0) / (item.attuned ? 15 : 25));
 			const diff = bonus - (item.state.applied ?? 0);
 			if (diff === 0) return;
 			item.state.applied = bonus;
 			f.changeStats({ strength: diff });
 		},
-		value: { stats: (attuned) => ({ strength: attuned ? 5 : 4 }) }
+		value: { stats: (attuned) => ({ strength: attuned ? 6 : 4 }) }
 	},
 	wandOfFlames: {
 		attack: {
@@ -453,30 +456,30 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		}
 	},
 	zapHelmet: {
-		passiveDanger: (item) => (item.attuned ? 20 : 15) / 3,
-		onTick: (item) =>
-			every(item, 3, () => {
-				const f = item.owner;
-				const target = f.nearestEnemy();
-				if (!target) return;
-				f.log({ type: 'projectile', fighter: f.index, target: target.index, img: '/mm/projectiles/laser.png' });
-				zap(item, target, item.attuned ? 20 : 15);
-			}),
-		value: { dps: (attuned) => (attuned ? 20 : 15) / 3 }
+		passiveDanger: (item) => (usesCharges(item.owner) ? (item.attuned ? 30 : 25) / (item.owner.timeToCharge() + CHARGED_COOLDOWN) : 0),
+		onCharge: (item) => {
+			const f = item.owner;
+			const target = f.nearestEnemy();
+			if (!target) return;
+			f.log({ type: 'projectile', fighter: f.index, target: target.index, img: '/mm/projectiles/laser.png' });
+			zap(item, target, item.attuned ? 30 : 25);
+		},
+		// about one charge per charge-up and use
+		value: { dps: (attuned, ctx) => (ctx.primaryCharges > 0 ? (attuned ? 30 : 25) / (ctx.timeToCharge + CHARGED_COOLDOWN / ctx.primaryCharges) : 0) }
 	},
 	headbuttersDelight: {
 		attack: { kind: 'melee', damage: [20, 25], cooldown: [3, 3], knockback: 1.5, scalesWith: 'toughness' }
 	},
 	chainsawHeadband: {
-		passiveDanger: (item) => (item.attuned ? 5 : 4),
+		passiveDanger: (item) => (item.attuned ? 6 : 5),
 		onTick: (item) =>
 			every(item, 1, () => {
 				const f = item.owner;
 				for (const e of f.enemies()) {
-					if (f.distanceTo(e) <= MELEE_RANGE) zap(item, e, item.attuned ? 5 : 4);
+					if (f.distanceTo(e) <= MELEE_RANGE) zap(item, e, item.attuned ? 6 : 5);
 				}
 			}),
-		value: { dps: (attuned) => (attuned ? 5 : 4) * IN_MELEE }
+		value: { dps: (attuned) => (attuned ? 6 : 5) * IN_MELEE }
 	},
 	moneySword: {
 		attack: {
@@ -493,14 +496,14 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		onTeammateKnockedOut: (item, teammate) => {
 			const f = item.owner;
 			if (f.hp <= 0 || teammate.hp > 0) return;
-			teammate.hp = 50;
-			f.fight.credit(item, 'hpHealed', 50);
+			teammate.hp = 30;
+			f.fight.credit(item, 'hpHealed', 30);
 			f.removeItem(item);
 			f.log({ type: 'animation', fighter: f.index, updates: { equipment: f.wornKeys() } });
 			teammate.log({ type: 'animation', fighter: teammate.index, updates: { hp: teammate.hp } });
 			teammate.log({ type: 'text', fighter: teammate.index, text: 'revived!', color: '#eeb' });
 		},
-		value: { revive: 0.5 }
+		value: { revive: 0.3 }
 	},
 	eyepatch: {
 		onKo: (item, victim) => {
@@ -525,11 +528,11 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			const f = item.owner;
 			for (const e of f.enemies()) {
 				const inRange = f.distanceTo(e) <= MELEE_RANGE ? 1 : 0;
-				if (inRange && !item.state[e.index]) zap(item, e, item.attuned ? 6 : 5);
+				if (inRange && !item.state[e.index]) zap(item, e, item.attuned ? 10 : 8);
 				item.state[e.index] = inRange;
 			}
 		},
-		value: { dps: (attuned, ctx) => ((attuned ? 6 : 5) * 2 * ctx.enemies) / TYPICAL_FIGHT_SECONDS }
+		value: { dps: (attuned, ctx) => ((attuned ? 10 : 8) * 2 * ctx.enemies) / TYPICAL_FIGHT_SECONDS }
 	},
 	censoredBar: {
 		blocksEffect: (_item, effect) => effect.negative
@@ -537,12 +540,12 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	theRatioInator: {
 		attack: {
 			kind: 'melee',
-			// typical: 30% of a target at 80 HP
-			damage: [24, 32],
+			// typical: a share of a target at 80 HP
+			damage: [27, 40],
 			cooldown: [2.5, 2.5],
 			knockback: 1,
 			fixed: true,
-			damageAt: (item, target) => Math.ceil(Math.max(target.hp, 0) * (item.attuned ? 0.4 : 0.3))
+			damageAt: (item, target) => Math.ceil(Math.max(target.hp, 0) * (item.attuned ? 1 / 2 : 1 / 3))
 		}
 	},
 	speedo: { statMods: () => ({ speed: 2 }) },
@@ -573,7 +576,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	foamFinger: {
 		action: {
 			priority: (item) =>
-				boostValue(item.owner, item.owner.teammates().filter((t) => t !== item.owner), 'hyped', HYPE_MODS, item.attuned ? 10 : 8, item.owner.actionTime(1, CHARGED_COOLDOWN)),
+				boostValue(item.owner, item.owner.teammates().filter((t) => t !== item.owner), 'hyped', HYPE_MODS, item.attuned ? 8 : 6, item.owner.actionTime(1, CHARGED_COOLDOWN)),
 			perform: (item) => {
 				const f = item.owner;
 				if (f.charges < 1) {
@@ -582,10 +585,10 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 				}
 				f.charges -= 1;
 				f.setCooldown(CHARGED_COOLDOWN);
-				for (const t of f.teammates()) if (t !== f) hype(t, item.attuned ? 10 : 8);
+				for (const t of f.teammates()) if (t !== f) hype(t, item.attuned ? 8 : 6);
 			}
 		},
-		value: { action: (attuned, ctx) => hypeAction(attuned ? 10 : 8, ctx) }
+		value: { action: (attuned, ctx) => hypeAction(attuned ? 8 : 6, ctx) }
 	},
 	rapier: { attack: { kind: 'melee', damage: [40, 50], cooldown: [3, 3], knockback: 1.5, scalesWith: 'accuracy' } },
 	taser: {
@@ -603,14 +606,14 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		value: { dps: (attuned, ctx) => stunValue(attuned ? 3 : 2, ctx) }
 	},
 	baseballBat: {
-		attack: { kind: 'melee', damage: [25, 30], cooldown: [3.5, 3.5], knockback: 20 },
+		attack: { kind: 'melee', damage: [30, 35], cooldown: [3.5, 3.5], knockback: 20 },
 		// melee enemies spend a few seconds walking back
 		value: { dps: (_attuned, ctx) => (1 - RANGED_SHARE) * stunValue(3, ctx) }
 	},
 	clawsForAlarm: {
 		attack: {
 			kind: 'melee',
-			damage: [10, 10],
+			damage: [12, 12],
 			cooldown: [2, 2],
 			knockback: 1,
 			effectValue: (item, target) => disablePlanning(target, 'scared', item.attuned ? 2 : 1)
@@ -624,7 +627,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		attack: { kind: 'ranged', damage: [70, 80], cooldown: [2, 2], knockback: 1.5, projectile: '/mm/projectiles/laser.png' }
 	},
 	sniperRifle: {
-		attack: { kind: 'ranged', damage: [120, 120], cooldown: [3, 3], knockback: 3, aim: 5, projectile: '/mm/projectiles/bullet.png' }
+		attack: { kind: 'ranged', damage: [120, 120], cooldown: [2, 2], knockback: 3, aim: 4, projectile: '/mm/projectiles/bullet.png' }
 	},
 	rayGun: {
 		attack: {
@@ -659,29 +662,29 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	flashbang: {
 		attack: {
 			kind: 'ranged',
-			damage: [10, 10],
+			damage: [0, 0],
 			cooldown: [CHARGED_COOLDOWN, CHARGED_COOLDOWN],
-			knockback: 0.5,
+			knockback: 0,
 			singleUse: true,
 			projectile: '/mm/projectiles/fireball.png',
 			effectValue: (item, target) =>
 				item.owner
 					.enemies()
 					.filter((e) => e.distanceTo(target) <= 10)
-					.reduce((sum, e) => sum + disablePlanning(e, 'stunned', 3), 0)
+					.reduce((sum, e) => sum + disablePlanning(e, 'stunned', 5), 0)
 		},
 		onHitDealt: (item, target, _damage, source) => {
 			if (source !== item) return;
-			for (const e of item.owner.enemies()) if (e.distanceTo(target) <= 10) stun(e, 3);
+			for (const e of item.owner.enemies()) if (e.distanceTo(target) <= 10) stun(e, 5);
 		},
-		// one 3s stun of a couple of enemies, spread over the fight
-		value: { dps: (_attuned, ctx) => (0.6 * (10 + TYPICAL_DPS * 3 * Math.min(ctx.enemies, 2))) / TYPICAL_FIGHT_SECONDS }
+		// one 5s stun of a couple of enemies, spread over the fight
+		value: { dps: (_attuned, ctx) => (0.6 * TYPICAL_DPS * 5 * Math.min(ctx.enemies, 2)) / TYPICAL_FIGHT_SECONDS }
 	},
 	leafBlower: {
 		action: {
 			priority: (item) => {
 				const f = item.owner;
-				const close = f.enemies().filter((e) => f.distanceTo(e) <= MELEE_RANGE && e.prefersMelee() && !e.isStunned());
+				const close = f.enemies().filter((e) => f.distanceTo(e) <= 10 && e.prefersMelee() && !e.isStunned());
 				// they're out of the fight for as long as it takes them to walk back, and to line up again
 				return close.reduce((sum, e) => sum + disableValue([e], 'blown', 15 / e.metersPerSecond() + 1, f.actionTime(0, 2)), 0);
 			},
@@ -689,7 +692,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 				const f = item.owner;
 				f.setCooldown(2);
 				f.log({ type: 'text', fighter: f.index, text: 'whoosh', color: '#cec' });
-				for (const e of f.enemies()) if (f.distanceTo(e) <= MELEE_RANGE) push(f, e, 15);
+				for (const e of f.enemies()) if (f.distanceTo(e) <= 10) push(f, e, 15);
 			}
 		},
 		value: { hp: () => 25 }
@@ -707,9 +710,9 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 		onFightStart: (item) => {
 			const f = item.owner;
 			const stronger = f.items.some((i) => i.key === 'strongerSummons');
-			item.owner.fight.summonDecoy(f, stronger ? 75 : 50);
+			item.owner.fight.summonDecoy(f, stronger ? 38 : 25);
 		},
-		value: { hp: () => 40 }
+		value: { hp: () => 20 }
 	},
 	jortsOfPower: {
 		onTick: (item) => every(item, item.attuned ? 4 : 5, () => item.owner.changeStats({ strength: 1 })),
@@ -737,7 +740,7 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 				ctx.primaryCharges > 0 ? ctx.primaryDps * Math.min(1, (ctx.hitsTaken * ctx.timeToCharge) / ctx.primaryCharges / TYPICAL_FIGHT_SECONDS) : 0
 		}
 	},
-	bandolier: { rangedCooldownReduction: 0.5 },
+	bandolier: { rangedCooldownReduction: 0.6 },
 	batteryPack: {
 		onFightStart: (item) => {
 			item.owner.charges += item.attuned ? 3 : 2;
@@ -779,11 +782,16 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	},
 	shirtOfManyBelts: {
 		onHitTaken: (_item, attacker, _damage, source) => {
-			if (source.behavior.attack?.kind === 'melee') stun(attacker, 2);
+			if (source.behavior.attack?.kind === 'melee') stun(attacker, 3);
 		},
-		value: { dps: (_attuned, ctx) => TYPICAL_DPS * Math.min(0.8, (2 * (1 - RANGED_SHARE) * ctx.hitsTaken) / TYPICAL_FIGHT_SECONDS) }
+		value: { dps: (_attuned, ctx) => TYPICAL_DPS * Math.min(0.8, (3 * (1 - RANGED_SHARE) * ctx.hitsTaken) / TYPICAL_FIGHT_SECONDS) }
 	}
 };
+
+/** Whether a fighter has anything that needs charges, so they spend time charging up. */
+function usesCharges(f: BattleFighter): boolean {
+	return f.items.some((i) => (i.behavior.attack?.charges?.[i.attuned ? 1 : 0] ?? 0) > 0 || i.key === 'flowerOfPower' || i.key === 'foamFinger');
+}
 
 function moneySwordDamage(attuned: boolean, money: number): number {
 	return 10 * Math.floor(Math.max(money, 0) / (attuned ? 6 : 8));
@@ -811,9 +819,9 @@ export const ABILITY_BEHAVIORS: Record<string, Behavior> = {
 		value: { stats: (_attuned, ctx) => ({ strength: (ctx.hitsPerSecond * TYPICAL_FIGHT_SECONDS) / 2 }) }
 	},
 	inattentive: {
-		onFightStart: (item) => stun(item.owner, 5),
-		// nobody can act for the first 3s anyway; after that, 2s more of not fighting
-		value: { output: (_attuned, ctx) => (ctx.immune ? 1 : 1 - 2 / TYPICAL_FIGHT_SECONDS - 0.05) }
+		onFightStart: (item) => stun(item.owner, 3),
+		// nobody can act for the first 3s anyway, so it only keeps them from moving
+		value: { output: (_attuned, ctx) => (ctx.immune ? 1 : 0.97) }
 	},
 	gainStrengthOnHitTaken: {
 		onHitTaken: (item) => item.owner.changeStats({ strength: 2 }),
@@ -836,21 +844,21 @@ export const ABILITY_BEHAVIORS: Record<string, Behavior> = {
 	},
 	pepTalk: {
 		onFightStart: (item) => {
-			for (const t of item.owner.teammates()) if (t !== item.owner) hype(t, 3);
+			for (const t of item.owner.teammates()) if (t !== item.owner) hype(t, 4);
 		},
-		value: { teamHype: () => 3 / TYPICAL_FIGHT_SECONDS }
+		value: { teamHype: () => 4 / TYPICAL_FIGHT_SECONDS }
 	},
 	taunt: {
 		onTick: (item) => {
 			const f = item.owner;
-			for (const e of f.enemies()) if (f.distanceTo(e) <= MELEE_RANGE) taunt(e, f);
+			for (const e of f.enemies()) if (f.distanceTo(e) <= 10) taunt(e, f);
 		},
-		value: { weight: 3 }
+		value: { weight: 2 }
 	},
 	scaredWhenHit: {
-		onHitTaken: (item, attacker) => scare(item.owner, 3, attacker),
+		onHitTaken: (item, attacker) => scare(item.owner, 2, attacker),
 		// scared fighters run, so they take about half as many hits as they otherwise would
-		value: { output: (_attuned, ctx) => (ctx.immune ? 1 : 1 - Math.min(0.8, (3 * ctx.hitsTaken) / 2 / TYPICAL_FIGHT_SECONDS)) }
+		value: { output: (_attuned, ctx) => (ctx.immune ? 1 : 1 - Math.min(0.8, (2 * ctx.hitsTaken) / 2 / TYPICAL_FIGHT_SECONDS)) }
 	},
 	// handled in the league after training camp
 	mentor: {},
