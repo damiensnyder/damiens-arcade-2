@@ -607,6 +607,8 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			cooldown: [5, 5],
 			knockback: 2,
 			damageAt: (item) => 20 + item.growth,
+			// for buying it: about what it averages over a couple of seasons of seasoning
+			planDamage: () => 32,
 			// each hit makes it better for good, so it's worth swinging even when fists would do as well
 			effectValue: () => PAN_SEASONING_VALUE
 		},
