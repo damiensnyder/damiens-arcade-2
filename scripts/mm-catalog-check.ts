@@ -70,7 +70,7 @@ const codeAbilities = new Map(
 		.map((a) => [a.name, a])
 );
 const seenAbilities = new Set<string>();
-for (const [nameAndPrice, description, flavor = '', ...extra] of section('Abilities')) {
+for (const [nameAndPrice, description, flavor = '', ...extra] of section('Fighter abilities')) {
 	const m = nameAndPrice.match(/^(.*), (-?)\$(\d+)$/);
 	if (!m) {
 		problems.push(`ability: can't read name and price from "${nameAndPrice}"`);

@@ -134,7 +134,6 @@ export class Fight {
 		this.fightTicks++;
 		this.overtime();
 		for (const f of this.fighters) f.upkeep();
-		this.wakeIfEveryoneAsleep();
 		for (const f of this.rng.shuffle(this.fighters.slice())) f.act();
 	}
 
@@ -144,15 +143,36 @@ export class Fight {
 		const ticksPerInterval = Math.round(OVERTIME_INTERVAL / TICK_LENGTH);
 		if (seconds < OVERTIME_START - 1e-6 || this.fightTicks % ticksPerInterval !== 0) return;
 		for (const f of this.fighters) {
-			if (f.hp > 0) f.changeStats({ toughness: -OVERTIME_TOUGHNESS_LOSS });
+			if (f.hp > 0 && !f.summoner) f.changeStats({ toughness: -OVERTIME_TOUGHNESS_LOSS });
 		}
 	}
 
-	/** If nobody standing is awake, nobody would ever wake up, so the crowd wakes everyone. */
-	private wakeIfEveryoneAsleep(): void {
-		const standing = this.fighters.filter((f) => f.hp > 0);
-		if (standing.length === 0 || !standing.every((f) => f.isAsleep())) return;
-		for (const f of standing) f.removeEffect('asleep');
+	/**
+	 * Summons a decoy next to `owner`: a copy of them with no stats or equipment that doesn't move
+	 * or attack, but that enemies take for the real thing.
+	 */
+	summonDecoy(owner: BattleFighter, hp: number): BattleFighter {
+		const fighter: Fighter = {
+			id: -1 - owner.fighterId,
+			name: owner.name,
+			age: 0,
+			stats: { strength: 0, accuracy: 0, energy: 0, speed: 0, toughness: 0 },
+			look: owner.look,
+			ability: 'noAbilities',
+			attunements: [],
+			contractYears: 0
+		};
+		const decoy = new BattleFighter(this, fighter, [], owner.team, [], owner);
+		decoy.index = this.fighters.length;
+		decoy.hp = hp;
+		decoy.x = owner.x;
+		decoy.y = Math.min(owner.y + 2 * CROWDING_DISTANCE, ARENA_SIZE - CROWDING_DISTANCE);
+		decoy.facing = owner.facing;
+		this.fighters.push(decoy);
+		this.uncrowd(decoy);
+		this.log({ type: 'spawn', fighter: { ...this.visualOf(decoy), summon: true } });
+		this.log({ type: 'particle', fighter: decoy.index, img: '/mm/charge.png' });
+		return decoy;
 	}
 
 	private newTick(): void {
@@ -161,7 +181,7 @@ export class Fight {
 	}
 
 	private teamsStanding(): TeamId[] {
-		return [...new Set(this.fighters.filter((f) => f.hp > 0).map((f) => f.team))];
+		return [...new Set(this.fighters.filter((f) => f.hp > 0 && !f.summoner).map((f) => f.team))];
 	}
 
 	private isOver(): boolean {
@@ -203,7 +223,7 @@ export class Fight {
 			for (const item of [...by.items]) item.behavior.onKo?.(item, victim);
 		}
 		for (const mate of this.fighters) {
-			if (mate === victim || mate.team !== victim.team || mate.hp <= 0) continue;
+			if (mate === victim || mate.team !== victim.team || mate.hp <= 0 || mate.summoner) continue;
 			for (const item of [...mate.items]) {
 				if (victim.hp > 0) return;
 				item.behavior.onTeammateKnockedOut?.(item, victim);
@@ -246,7 +266,8 @@ export class Fight {
 		const teams = [...new Set(this.fighters.map((f) => f.team))];
 		const standing = new Map<TeamId, number>(teams.map((t) => [t, 0]));
 		const hpLeft = new Map<TeamId, number>(teams.map((t) => [t, 0]));
-		for (const f of this.fighters) {
+		const fighters = this.fighters.filter((f) => !f.summoner);
+		for (const f of fighters) {
 			if (f.hp > 0) {
 				standing.set(f.team, standing.get(f.team)! + 1);
 				hpLeft.set(f.team, hpLeft.get(f.team)! + f.hp);
@@ -262,7 +283,7 @@ export class Fight {
 			items: [...this.itemTotals].map(([equipmentId, totals]) => ({ equipmentId, ...totals })),
 			winner: ranked[0],
 			standing,
-			fighters: this.fighters.map((f) => ({
+			fighters: fighters.map((f) => ({
 				fighterId: f.fighterId,
 				name: f.name,
 				team: f.team,

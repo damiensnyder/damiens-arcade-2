@@ -93,7 +93,8 @@ const fighter = z.object({
 		skin: int.min(0).max(9),
 		hairColor: int.min(0).max(9)
 	}),
-	ability: z.string().refine((k) => ABILITY_KEYS.includes(k), 'unknown ability'),
+	// Inattentive used to be Sleepyhead
+	ability: z.preprocess((k) => (k === 'sleepyhead' ? 'inattentive' : k), z.string().refine((k) => ABILITY_KEYS.includes(k), 'unknown ability')),
 	attunements: z.array(equipmentKey),
 	contractYears: int,
 	isOwner: z.boolean().optional()

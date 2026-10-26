@@ -63,11 +63,6 @@ interface AttackOption {
 const MELEE_COMMIT_LEAD = 0.1;
 /** How strongly retreating fighters are pulled toward the middle of the arena, against being pushed away from enemies. */
 const RETREAT_CENTERING = 0.7;
-/**
- * Sleeping fighters wake up when they take damage, so they're worth this much less as targets
- * while anyone else is awake: better to deal with the fighters who can fight back first.
- */
-const ASLEEP_TARGET_WEIGHT = 0.2;
 
 export class BattleFighter {
 	readonly fight: Fight;
@@ -82,6 +77,12 @@ export class BattleFighter {
 	facing = 1;
 	cooldown = INITIAL_COOLDOWN;
 	charges = 0;
+	/** Seconds since the fighter last moved, for weapons that need aiming. */
+	stillTime = 0;
+	/** Where the fighter has to stay near (from a house arrest ankle bracelet), if anywhere. */
+	tether: { x: number; y: number; radius: number } | null = null;
+	/** For a summon (like a decoy), who summoned it. Summons don't count as fighters standing. */
+	readonly summoner: BattleFighter | null;
 	stats: Stats;
 	items: BattleItem[];
 	effects: StatusEffect[] = [];
@@ -99,8 +100,9 @@ export class BattleFighter {
 	kos = 0;
 	kod = 0;
 
-	constructor(fight: Fight, fighter: Fighter, equipmentKeys: string[], team: TeamId, equipmentIds: number[] = []) {
+	constructor(fight: Fight, fighter: Fighter, equipmentKeys: string[], team: TeamId, equipmentIds: number[] = [], summoner: BattleFighter | null = null) {
 		this.fight = fight;
+		this.summoner = summoner;
 		this.team = team;
 		this.fighterId = fighter.id;
 		this.name = fighter.name;
@@ -114,7 +116,8 @@ export class BattleFighter {
 			owner: this,
 			state: {}
 		});
-		this.items = [item('fists', 'fists', FISTS)];
+		// summons don't attack
+		this.items = summoner ? [] : [item('fists', 'fists', FISTS)];
 		const ability = ABILITY_BEHAVIORS[fighter.ability];
 		if (ability && Object.keys(ability).length > 0) this.items.push(item(fighter.ability, 'ability', ability));
 		equipmentKeys.forEach((key, i) => {
@@ -167,11 +170,13 @@ export class BattleFighter {
 		return Math.max(this.hp, 0) / this.damageTakenMultiplier();
 	}
 
-	cooldownReduction(): number {
-		return this.items.reduce((sum, i) => sum + (i.behavior.cooldownReduction ?? 0), 0);
+	/** Seconds off cooldowns, with ranged ones' extra reduction if `ranged`. */
+	cooldownReduction(ranged = false): number {
+		return this.items.reduce((sum, i) => sum + (i.behavior.cooldownReduction ?? 0) + (ranged ? (i.behavior.rangedCooldownReduction ?? 0) : 0), 0);
 	}
 
 	targetWeight(): number {
+		if (this.summoner) return this.summoner.targetWeight();
 		return this.items.reduce((w, i) => w * (i.behavior.targetWeight ?? 1), 1);
 	}
 
@@ -187,17 +192,24 @@ export class BattleFighter {
 		return this.cooldown + this.timeToCharge() * Math.max(chargesNeeded - this.charges, 0);
 	}
 
+	/** Standing fighters on this team, not counting summons. */
 	teammates(): BattleFighter[] {
-		return this.fight.fighters.filter((f) => f.team === this.team && f.hp > 0);
+		return this.fight.fighters.filter((f) => f.team === this.team && f.hp > 0 && !f.summoner);
 	}
 
+	/** Standing enemies, summons included. */
 	enemies(): BattleFighter[] {
 		return this.fight.fighters.filter((f) => f.team !== this.team && f.hp > 0);
 	}
 
+	/** Enemies that can be picked out to attack: not invisible. */
+	targetableEnemies(): BattleFighter[] {
+		return this.enemies().filter((e) => !e.isInvisible());
+	}
+
 	nearestEnemy(): BattleFighter | null {
 		let best: BattleFighter | null = null;
-		for (const e of this.enemies()) {
+		for (const e of this.targetableEnemies()) {
 			if (best === null || this.distanceTo(e) < this.distanceTo(best)) best = e;
 		}
 		return best;
@@ -216,9 +228,10 @@ export class BattleFighter {
 		return options;
 	}
 
-	/** Seconds per use of an attack, including charging. */
+	/** Seconds per use of an attack, including charging (and aiming, which overlaps the cooldown). */
 	private cycleTime(option: AttackOption): number {
-		return Math.max(option.cooldown - this.cooldownReduction(), TICK_LENGTH) + option.charges * this.timeToCharge();
+		const cooldown = Math.max(option.cooldown - this.cooldownReduction(option.spec.kind !== 'melee'), TICK_LENGTH);
+		return Math.max(cooldown, option.spec.aim ?? 0) + option.charges * this.timeToCharge();
 	}
 
 	/**
@@ -246,11 +259,13 @@ export class BattleFighter {
 		return result;
 	}
 
-	/** Roughly how much damage per second this fighter threatens. */
+	/** Roughly how much damage per second this fighter threatens. Decoys look as dangerous as whoever they copy. */
 	danger(): number {
+		if (this.summoner) return this.summoner.hp > 0 ? this.summoner.danger() : 0;
 		let best = 0;
 		const enemyCount = Math.max(this.enemies().length, 1);
 		for (const option of this.attackOptions()) {
+			if (option.spec.singleUse) continue;
 			const dps = this.rawDps(option) * (option.spec.kind === 'aoe' ? enemyCount : 1);
 			best = Math.max(best, dps);
 		}
@@ -259,9 +274,10 @@ export class BattleFighter {
 		return best + passive;
 	}
 
-	private prefersMelee(): boolean {
+	prefersMelee(): boolean {
 		let best: AttackOption | null = null;
 		for (const option of this.attackOptions()) {
+			if (option.spec.singleUse) continue;
 			if (best === null || this.rawDps(option) > this.rawDps(best)) best = option;
 		}
 		return best?.spec.kind === 'melee';
@@ -269,9 +285,8 @@ export class BattleFighter {
 
 	/** How good it is to attack this target: their danger over the time it'd take to knock them out. */
 	private valueOfAttacking(target: BattleFighter, rawDps: number, timeToFirstHit: number): number {
-		const weight = target.targetWeight() * (target.isAsleep() ? ASLEEP_TARGET_WEIGHT : 1);
 		return (
-			(target.danger() * weight) /
+			(target.danger() * target.targetWeight()) /
 			(timeToFirstHit + target.effectiveHp() / Math.max(rawDps, EPSILON))
 		);
 	}
@@ -309,24 +324,25 @@ export class BattleFighter {
 		}
 		const newTint = this.tint();
 		if (statsChanged || newTint.some((x, i) => x !== oldTint[i])) {
-			this.log({ type: 'animation', fighter: this.index, updates: { stats: this.stats, tint: newTint } });
+			this.log({ type: 'animation', fighter: this.index, updates: { stats: this.stats, tint: newTint, opacity: this.opacity() } });
 		}
 
 		this.cooldown -= this.effects.some((e) => e.slow) ? TICK_LENGTH / 2 : TICK_LENGTH;
 		if (this.cooldown < EPSILON) this.cooldown = 0;
+		this.stillTime += TICK_LENGTH;
 
 		if (this.hp <= 0 || this.enemies().length === 0) return;
 		for (const item of [...this.items]) item.behavior.onTick?.(item);
 	}
 
 	act(): void {
-		if (this.hp <= 0) return;
-		const allEnemies = this.enemies();
-		if (allEnemies.length === 0) return;
+		if (this.hp <= 0 || this.summoner) return;
+		const allEnemies = this.targetableEnemies();
+		if (this.enemies().length === 0) return;
 		const startX = this.x;
 		const startY = this.y;
 
-		if (this.isAsleep()) return;
+		if (this.isStunned()) return;
 		const scared = this.effects.find((e) => e.name === 'scared');
 		if (scared) {
 			this.retreat(scared.source && scared.source.hp > 0 ? [scared.source] : undefined);
@@ -334,7 +350,10 @@ export class BattleFighter {
 		}
 		// taunted fighters can only go after whoever taunted them (area attacks still hit everyone)
 		const taunter = this.effects.find((e) => e.name === 'taunted')?.source;
-		const enemies = taunter && taunter.hp > 0 ? [taunter] : allEnemies;
+		const enemies = taunter && taunter.hp > 0 && !taunter.isInvisible() ? [taunter] : allEnemies;
+		// lightning rods draw all ranged attacks
+		const rods = enemies.filter((e) => e.items.some((i) => i.behavior.drawsRanged));
+		const rangedTargets = rods.length > 0 ? rods : enemies;
 
 		let bestPriority = -Infinity;
 		let bestAction: (() => void) | null = null;
@@ -352,12 +371,12 @@ export class BattleFighter {
 				}
 				continue;
 			}
-			for (const target of enemies) {
+			for (const target of option.spec.kind === 'ranged' ? rangedTargets : enemies) {
 				const dps = this.rawDps(option, target);
 				const timeToFirst =
 					option.spec.kind === 'melee'
 						? Math.max(this.timeUntilReady(option.charges), this.timeToReach(target))
-						: this.timeUntilReady(option.charges);
+						: Math.max(this.timeUntilReady(option.charges), (option.spec.aim ?? 0) - this.stillTime);
 				const priority = this.valueOfAttacking(target, dps, timeToFirst);
 				if (priority > bestPriority) {
 					bestPriority = priority;
@@ -404,6 +423,7 @@ export class BattleFighter {
 		if (this.distanceTo(target) <= MELEE_RANGE && this.cooldown === 0 && this.charges >= option.charges) {
 			this.charges -= option.charges;
 			this.setCooldown(option.cooldown);
+			this.used(option);
 			this.swing(Pose.BackswingStart, Pose.Backswing);
 			const base = option.spec.damageAt?.(option.item, target) ?? option.damage;
 			const damage = option.spec.fixed ? base : base * this.meleeDamageMultiplier(option.spec.scalesWith);
@@ -415,9 +435,11 @@ export class BattleFighter {
 
 	private rangedAttack(target: BattleFighter, option: AttackOption): void {
 		this.keepAwayFromMelee();
-		if (this.cooldown === 0 && this.charges >= option.charges) {
+		const aimed = this.stillTime >= (option.spec.aim ?? 0) - EPSILON;
+		if (this.cooldown === 0 && this.charges >= option.charges && aimed) {
 			this.charges -= option.charges;
-			this.setCooldown(option.cooldown);
+			this.setCooldown(option.cooldown, true);
+			this.stillTime = 0;
 			this.swing(Pose.AimStart, Pose.Aim);
 			this.faceTowards(target);
 			if (option.spec.projectile) {
@@ -428,6 +450,7 @@ export class BattleFighter {
 			} else {
 				this.log({ type: 'text', fighter: target.index, text: 'missed', color: '#aaa' });
 			}
+			this.used(option);
 		} else if (this.charges < option.charges && this.cooldown === 0) {
 			this.charge();
 		}
@@ -437,7 +460,7 @@ export class BattleFighter {
 		this.keepAwayFromMelee();
 		if (this.cooldown === 0 && this.charges >= option.charges) {
 			this.charges -= option.charges;
-			this.setCooldown(option.cooldown);
+			this.setCooldown(option.cooldown, true);
 			this.swing(Pose.AimStart, Pose.Aim);
 			for (const target of this.enemies()) {
 				if (option.spec.projectile) {
@@ -450,11 +473,18 @@ export class BattleFighter {
 		}
 	}
 
+	/** Single-use attacks are used up once fired. */
+	private used(option: AttackOption): void {
+		if (!option.spec.singleUse) return;
+		this.removeItem(option.item);
+		this.log({ type: 'animation', fighter: this.index, updates: { equipment: this.wornKeys() } });
+	}
+
 	/** Back away from the closest melee fighter who'd reach us before we can act again. */
 	private keepAwayFromMelee(): void {
 		let threat: BattleFighter | null = null;
 		for (const e of this.enemies()) {
-			if (e.isAsleep() || !e.prefersMelee() || e.timeToReach(this) >= this.cooldown) continue;
+			if (e.isStunned() || !e.prefersMelee() || e.timeToReach(this) >= this.cooldown) continue;
 			if (threat === null || this.distanceTo(e) < this.distanceTo(threat)) threat = e;
 		}
 		if (threat) this.retreat();
@@ -473,8 +503,8 @@ export class BattleFighter {
 		this.log({ type: 'animation', fighter: this.index, updates: { rotation: this.pose } });
 	}
 
-	setCooldown(seconds: number): void {
-		this.cooldown = Math.max(0, seconds - this.cooldownReduction());
+	setCooldown(seconds: number, ranged = false): void {
+		this.cooldown = Math.max(0, seconds - this.cooldownReduction(ranged));
 	}
 
 	// ---- hits and damage ----
@@ -487,7 +517,7 @@ export class BattleFighter {
 		for (const item of this.items) rawDamage *= item.behavior.damageMultiplier?.(item, target) ?? 1;
 		const damage = Math.ceil(rawDamage * (scaled ? target.damageTakenMultiplier() : 1));
 		for (const item of [...target.items]) {
-			if (item.behavior.preventHit?.(item, this, damage)) {
+			if (item.behavior.preventHit?.(item, this, damage, source)) {
 				this.fight.credit(item, 'dmgPrevented', Math.min(damage, Math.max(target.hp, 0)));
 				return;
 			}
@@ -511,9 +541,12 @@ export class BattleFighter {
 		if (target.hp <= 0 || amount <= 0) return;
 		const dealt = Math.min(amount, target.hp);
 		target.hp -= amount;
-		this.dmgDealt += dealt;
-		target.dmgTaken += dealt;
-		if (target.team !== this.team) this.fight.credit(item, 'dmgDealt', dealt);
+		// damage to a decoy is wasted
+		if (!target.summoner) {
+			this.dmgDealt += dealt;
+			target.dmgTaken += dealt;
+			if (target.team !== this.team) this.fight.credit(item, 'dmgDealt', dealt);
+		}
 		if (isHit) target.flash = 1;
 		target.log({
 			type: 'animation',
@@ -524,8 +557,9 @@ export class BattleFighter {
 			target.log({ type: 'hit', fighter: target.index, by: this.index, damage: amount });
 			target.log({ type: 'particle', fighter: target.index, img: '/mm/damage.png' });
 		}
-		if (target.hp > 0) target.removeEffect('asleep');
-		if (target.hp <= 0) {
+		if (target.hp <= 0 && target.summoner) {
+			target.log({ type: 'text', fighter: target.index, text: 'decoy!', color: '#aaa' });
+		} else if (target.hp <= 0) {
 			if (target.team !== this.team) this.kos++;
 			target.kod++;
 			this.fight.knockedOut(target, this);
@@ -553,7 +587,7 @@ export class BattleFighter {
 		}
 		this.applyMods(effect.mods, 1);
 		this.effects.push(effect);
-		this.log({ type: 'animation', fighter: this.index, updates: { stats: this.stats, tint: this.tint() } });
+		this.log({ type: 'animation', fighter: this.index, updates: { stats: this.stats, tint: this.tint(), opacity: this.opacity() } });
 	}
 
 	removeEffect(name: string): void {
@@ -561,11 +595,19 @@ export class BattleFighter {
 		if (!effect) return;
 		this.effects = this.effects.filter((e) => e !== effect);
 		this.applyMods(effect.mods, -1);
-		this.log({ type: 'animation', fighter: this.index, updates: { stats: this.stats, tint: this.tint() } });
+		this.log({ type: 'animation', fighter: this.index, updates: { stats: this.stats, tint: this.tint(), opacity: this.opacity() } });
 	}
 
-	isAsleep(): boolean {
-		return this.effects.some((e) => e.name === 'asleep');
+	isStunned(): boolean {
+		return this.effects.some((e) => e.name === 'stunned');
+	}
+
+	isInvisible(): boolean {
+		return this.effects.some((e) => e.name === 'invisible');
+	}
+
+	opacity(): number {
+		return this.isInvisible() ? 0.3 : 1;
 	}
 
 	/** Whether an effect like this one would be kept off the fighter (by an immunity). */
@@ -598,6 +640,8 @@ export class BattleFighter {
 		this.x += dx;
 		this.y += dy;
 		this.fight.uncrowd(this);
+		this.keepTethered();
+		this.stillTime = 0;
 
 		const cycle = [Pose.Stationary1, Pose.WalkingStart1, Pose.Walking1, Pose.Stationary2, Pose.WalkingStart2, Pose.Walking2];
 		const i = cycle.indexOf(this.pose);
@@ -613,6 +657,16 @@ export class BattleFighter {
 			updates.facing = this.facing;
 		}
 		this.log({ type: 'animation', fighter: this.index, updates });
+	}
+
+	/** Pulls the fighter back to the edge of where they're tethered to, if they've strayed. */
+	keepTethered(): void {
+		const t = this.tether;
+		if (!t) return;
+		const distance = Math.hypot(this.x - t.x, this.y - t.y);
+		if (distance <= t.radius) return;
+		this.x = t.x + ((this.x - t.x) * t.radius) / distance;
+		this.y = t.y + ((this.y - t.y) * t.radius) / distance;
 	}
 
 	private faceTowards(target: BattleFighter): void {

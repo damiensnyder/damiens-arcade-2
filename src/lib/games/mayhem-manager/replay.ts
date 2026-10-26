@@ -90,7 +90,8 @@ export class Replay {
 			for (const e of events) {
 				if (e.type === 'spawn') {
 					hp.push(e.fighter.hp);
-					teams.push(e.fighter.team);
+					// summons don't keep a team in the fight
+					teams.push(e.fighter.summon ? -1 : e.fighter.team);
 				} else if (e.type === 'animation' && e.updates.hp !== undefined) {
 					hp[e.fighter] = e.updates.hp;
 				}
@@ -98,7 +99,7 @@ export class Replay {
 			const fighters = hp.flatMap((h, i) => (h <= 0 && (before[i] ?? 1) > 0 ? [i] : []));
 			if (fighters.length > 0) this.knockouts.push({ tick, fighters });
 		});
-		const teamsStanding = new Set(teams.filter((_, i) => hp[i] > 0));
+		const teamsStanding = new Set(teams.filter((t, i) => t >= 0 && hp[i] > 0));
 		this.finalKnockout = teamsStanding.size <= 1 ? (this.knockouts.at(-1)?.tick ?? null) : null;
 	}
 

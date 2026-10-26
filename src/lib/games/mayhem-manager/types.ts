@@ -288,6 +288,10 @@ export interface FighterVisual {
 	rotation: number;
 	tint: Tint;
 	flash: number;
+	/** Less than 1 while invisible. */
+	opacity?: number;
+	/** A summon (like a decoy) rather than one of the team's fighters. */
+	summon?: boolean;
 }
 
 export type FightEvent =

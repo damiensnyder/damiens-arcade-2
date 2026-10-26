@@ -176,7 +176,7 @@
 	const kits = $derived(
 		new Map<number, Kit>(teams.map((t, i) => [t, i === 1 && teams.length === 2 ? awayKit(teams[0], t) : kitFor(t)]))
 	);
-	const alive = (team: number) => frame.fighters.filter((f) => f.team === team && f.hp > 0).length;
+	const alive = (team: number) => frame.fighters.filter((f) => f.team === team && f.hp > 0 && !f.summon).length;
 	const clock = $derived.by(() => {
 		const secs = Math.max(0, Math.floor(Math.max(tick, 0) * TICK_SECONDS));
 		return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
@@ -304,7 +304,7 @@
 				<!-- the fallen stay where they fell, under everyone still fighting -->
 				<div class="fighter" style:left="{pct(f.x)}%" style:top="{pct(f.y)}%" style:z-index={down ? Math.round(f.y) : 1000 + Math.round(f.y * 10)}>
 					<span class="shadow" style:transform={shadowTransform(f, fx)}></span>
-					<div class="body" class:down style:transform={bodyTransform(f, fx)} style:filter={fighterFilter(f, fx)}>
+					<div class="body" class:down style:transform={bodyTransform(f, fx)} style:filter={fighterFilter(f, fx)} style:opacity={f.opacity}>
 						{#each spriteLayers(f.look, kits.get(f.team) ?? kitFor(f.team), f.equipment) as layer, j (j)}
 							<img src={layer.src} alt="" style:filter={layer.filter} style:transform={layer.flip ? 'scaleX(-1)' : undefined} draggable="false" />
 						{/each}
@@ -383,7 +383,7 @@
 					<h3 class:own={t === mm.vp?.myTeam}>{TEAMS[t].last}</h3>
 				</div>
 				{#each frame.fighters as f, i (f.fighterId)}
-					{#if f.team === t}
+					{#if f.team === t && !f.summon}
 					<div class="mate" class:down={f.hp <= 0}>
 						<span class="mini-sprite"><FighterSprite look={f.look} team={f.team} kit={kits.get(f.team) ?? null} equipment={f.equipment} size={44} /></span>
 						<div class="mate-text">

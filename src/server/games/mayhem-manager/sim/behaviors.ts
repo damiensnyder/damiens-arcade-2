@@ -17,7 +17,7 @@ export interface AttackSpec {
 	damage: [number, number];
 	/** Damage each hit does later (like burning), for planning. Not scaled by strength. */
 	lingering?: number;
-	/** What a hit's side effects on this target are worth, in damage, for planning (like putting them to sleep). */
+	/** What a hit's side effects on this target are worth, in damage, for planning (like stunning them). */
 	effectValue?: (item: BattleItem, target: BattleFighter) => number;
 	cooldown: [number, number];
 	charges?: [number, number];
@@ -32,6 +32,10 @@ export interface AttackSpec {
 	damageAt?: (item: BattleItem, target: BattleFighter) => number;
 	/** For the valuation, damage worked out from what it knows (like the team's money), in place of `damage`. */
 	planDamage?: (attuned: boolean, ctx: ValueContext) => number;
+	/** Seconds the wearer has to stand still before each shot. */
+	aim?: number;
+	/** The item is used up once fired. */
+	singleUse?: boolean;
 }
 
 /** What the valuation knows about the wearer and their fight, for hints that depend on it. */
@@ -49,6 +53,11 @@ export interface ValueContext {
 	immune: boolean;
 	/** The team's money during its fights. */
 	money: number;
+	/** Whether the wearer's primary attack is melee. */
+	melee: boolean;
+	/** Charges the primary attack uses, and its damage per second. */
+	primaryCharges: number;
+	primaryDps: number;
 }
 
 /**
@@ -85,6 +94,10 @@ export interface Behavior {
 	statMods?: (attuned: boolean) => Partial<Stats>;
 	/** Seconds taken off every cooldown the wearer starts. */
 	cooldownReduction?: number;
+	/** Seconds taken off the wearer's ranged attacks' cooldowns, on top of that. */
+	rangedCooldownReduction?: number;
+	/** Enemies' ranged attacks can only target the wearer (or others with this). */
+	drawsRanged?: boolean;
 	/** Multiplier on how attractive the wearer is as a target. */
 	targetWeight?: number;
 	/** Extra danger (≈ damage per second) enemies should account for. */
@@ -98,7 +111,7 @@ export interface Behavior {
 	/** Runs at the start of every tick while the wearer is standing. */
 	onTick?: (item: BattleItem) => void;
 	/** Return true to cancel the hit entirely. Runs before any damage is applied. */
-	preventHit?: (item: BattleItem, attacker: BattleFighter, damage: number) => boolean;
+	preventHit?: (item: BattleItem, attacker: BattleFighter, damage: number, source: BattleItem) => boolean;
 	/** Multiplier on the damage of the wearer's hits. */
 	damageMultiplier?: (item: BattleItem, target: BattleFighter) => number;
 	onHitTaken?: (item: BattleItem, attacker: BattleFighter, damage: number, source: BattleItem) => void;
@@ -114,7 +127,7 @@ export interface Behavior {
 	value?: ValueHints;
 }
 
-/** Cooldown for equipment that uses charges, unless its description says otherwise. */
+/** Cooldown for equipment that uses charges, and other actions, unless its description says otherwise. */
 const CHARGED_COOLDOWN = 1;
 
 const at = <T>(item: BattleItem, pair: [T, T]): T => (item.attuned ? pair[1] : pair[0]);
@@ -147,20 +160,40 @@ function scare(target: BattleFighter, seconds: number, source: BattleFighter): v
 	target.addEffect({ name: 'scared', remaining: seconds, negative: true, mods: {}, source, tint: [0.6, 0.3, 1, 0.3] });
 }
 
-const asleep = (seconds = MAX_FIGHT_SECONDS): StatusEffect => ({ name: 'asleep', remaining: seconds, negative: true, mods: {}, tint: [0.3, 0.3, 0.6, 0.35] });
+const stunned = (seconds: number): StatusEffect => ({ name: 'stunned', remaining: seconds, negative: true, mods: {}, tint: [1, 1, 0.4, 0.35] });
 
-/** Sleeping fighters don't move or act until they take damage (see BattleFighter.dealDamage) or it wears off. */
-function sleep(target: BattleFighter, seconds?: number): void {
-	if (target.hp <= 0 || target.isAsleep() || target.wouldBlock(asleep())) return;
-	target.addEffect(asleep(seconds));
-	target.log({ type: 'text', fighter: target.index, text: 'zzz', color: '#aac' });
+/** Stunned fighters don't move or act until it wears off. */
+function stun(target: BattleFighter, seconds: number): void {
+	if (target.hp <= 0 || target.wouldBlock(stunned(seconds))) return;
+	if (!target.isStunned()) target.log({ type: 'text', fighter: target.index, text: 'stunned', color: '#ee8' });
+	target.addEffect(stunned(seconds));
+}
+
+function invisible(target: BattleFighter, seconds: number): void {
+	target.addEffect({ name: 'invisible', remaining: seconds, negative: false, mods: {}, tint: [0, 0, 0, 0] });
+}
+
+/** Pushes `target` this many meters straight away from `from`. */
+function push(from: BattleFighter, target: BattleFighter, meters: number): void {
+	const dx = target.x - from.x;
+	const dy = target.y - from.y;
+	const d = Math.max(Math.hypot(dx, dy), 0.01);
+	target.moveByVector((dx / d) * meters, (dy / d) * meters, false);
 }
 
 /**
- * Putting someone to sleep, for planning: like dealing this share of their effective HP. Knocking
- * them out takes them out for the rest of the fight; sleep, until someone hits them.
+ * Taking an enemy out of the fight for a while (stunning, scaring), for planning: like dealing
+ * the share of their effective HP that this is of how long they'd otherwise go on fighting. Only
+ * time beyond what's left of the same effect counts.
  */
-const SLEEP_PLANNING = 0.6;
+const DISABLE_PLANNING_SECONDS = 15;
+
+function disablePlanning(target: BattleFighter, effect: string, seconds: number): number {
+	// pushing someone away isn't a status effect, so immunity doesn't help
+	if (target.summoner || (effect !== 'blown' && target.wouldBlock(stunned(seconds)))) return 0;
+	const existing = target.effects.find((e) => e.name === effect)?.remaining ?? 0;
+	return (target.effectiveHp() * Math.min(Math.max(seconds - existing, 0), DISABLE_PLANNING_SECONDS)) / DISABLE_PLANNING_SECONDS;
+}
 
 // ---- what item actions are worth ----
 //
@@ -172,6 +205,11 @@ function healValue(target: BattleFighter, amount: number, seconds: number): numb
 	const healed = Math.min(amount, 100 - target.hp) / target.damageTakenMultiplier();
 	if (healed <= 0 || target.hp <= 0) return 0;
 	return (target.danger() * healed) / ((target.effectiveHp() + healed) * seconds);
+}
+
+/** Disabling enemies, as an action: their danger times the share of the fight they lose, per second spent. */
+function disableValue(targets: BattleFighter[], effect: string, seconds: number, spent: number): number {
+	return targets.reduce((sum, t) => sum + (t.danger() * disablePlanning(t, effect, seconds)) / Math.max(t.effectiveHp(), 1), 0) / spent;
 }
 
 /** Fighters land about half the damage danger() suggests (walking, waiting, missing), per test fights. */
@@ -247,8 +285,13 @@ const IN_MELEE = 0.5;
 /** Damage per second of a typical enemy. */
 const TYPICAL_DPS = 10;
 
-/** Seconds a sleeping enemy stays asleep, on average: longer when teammates can deal with the rest. */
-const sleepSeconds = (ctx: ValueContext) => (ctx.teammates > 0 ? 6 : 2);
+/** Stopping the target from acting for this long on each hit. */
+function stunValue(seconds: number, ctx: ValueContext): number {
+	return TYPICAL_DPS * Math.min(1, seconds * ctx.hitsPerSecond);
+}
+
+/** Share of enemies' hits that are ranged. */
+const RANGED_SHARE = 0.4;
 
 /** Freezing a target on each hit: it attacks at half speed while frozen. */
 function freezeValue(seconds: number, ctx: ValueContext): number {
@@ -286,13 +329,12 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			cooldown: [4, 4],
 			knockback: 0.5,
 			projectile: '/mm/projectiles/bullet.png',
-			effectValue: (_item, target) => (target.isAsleep() || target.wouldBlock(asleep()) ? 0 : SLEEP_PLANNING * target.effectiveHp())
+			effectValue: (_item, target) => disablePlanning(target, 'stunned', 4)
 		},
 		onHitDealt: (item, target, _damage, source) => {
-			if (source === item) sleep(target);
+			if (source === item) stun(target, 4);
 		},
-		// the enemy's damage that doesn't happen while they sleep
-		value: { dps: (_attuned, ctx) => Math.min(TYPICAL_DPS * sleepSeconds(ctx) * ctx.hitsPerSecond, TYPICAL_DPS * ctx.enemies * 0.8) }
+		value: { dps: (_attuned, ctx) => stunValue(4, ctx) }
 	},
 	flareGun: {
 		// the target's burning, plus whoever's near them
@@ -304,11 +346,11 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	},
 	cornDog: {
 		action: {
-			priority: (item) => healValue(item.owner, 40, item.owner.actionTime(0, 2)),
+			priority: (item) => healValue(item.owner, 40, item.owner.actionTime(0, CHARGED_COOLDOWN)),
 			perform: (item) => {
 				const f = item.owner;
 				heal(f, 40, item);
-				f.setCooldown(Math.max(f.cooldown, 2));
+				f.setCooldown(Math.max(f.cooldown, CHARGED_COOLDOWN));
 				f.removeItem(item);
 				f.log({ type: 'animation', fighter: f.index, updates: { equipment: f.wornKeys() } });
 			}
@@ -439,8 +481,8 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 	moneySword: {
 		attack: {
 			kind: 'melee',
-			// typical: teams keep about $6 into the season, so it mostly whiffs (about 6 a hit, or 8 attuned)
-			damage: [6, 8],
+			// typical: teams keep about $6 into the season, so it mostly whiffs unattuned (call it 5 a hit) and deals 10 attuned
+			damage: [5, 10],
 			cooldown: [3, 3],
 			knockback: 2,
 			damageAt: (item) => moneySwordDamage(item.attuned, item.owner.teamMoney()),
@@ -544,11 +586,207 @@ export const EQUIPMENT_BEHAVIORS: Record<string, Behavior> = {
 			}
 		},
 		value: { action: (attuned, ctx) => hypeAction(attuned ? 10 : 8, ctx) }
+	},
+	rapier: { attack: { kind: 'melee', damage: [40, 50], cooldown: [3, 3], knockback: 1.5, scalesWith: 'accuracy' } },
+	taser: {
+		attack: {
+			kind: 'melee',
+			damage: [25, 25],
+			cooldown: [CHARGED_COOLDOWN, CHARGED_COOLDOWN],
+			charges: [1, 1],
+			knockback: 0.5,
+			effectValue: (item, target) => disablePlanning(target, 'stunned', item.attuned ? 3 : 2)
+		},
+		onHitDealt: (item, target, _damage, source) => {
+			if (source === item) stun(target, item.attuned ? 3 : 2);
+		},
+		value: { dps: (attuned, ctx) => stunValue(attuned ? 3 : 2, ctx) }
+	},
+	baseballBat: {
+		attack: { kind: 'melee', damage: [25, 30], cooldown: [3.5, 3.5], knockback: 20 },
+		// melee enemies spend a few seconds walking back
+		value: { dps: (_attuned, ctx) => (1 - RANGED_SHARE) * stunValue(3, ctx) }
+	},
+	clawsForAlarm: {
+		attack: {
+			kind: 'melee',
+			damage: [10, 10],
+			cooldown: [2, 2],
+			knockback: 1,
+			effectValue: (item, target) => disablePlanning(target, 'scared', item.attuned ? 2 : 1)
+		},
+		onHitDealt: (item, target, _damage, source) => {
+			if (source === item) scare(target, item.attuned ? 2 : 1, item.owner);
+		},
+		value: { dps: (attuned, ctx) => stunValue(attuned ? 2 : 1, ctx) }
+	},
+	lasestBlaster: {
+		attack: { kind: 'ranged', damage: [70, 80], cooldown: [2, 2], knockback: 1.5, projectile: '/mm/projectiles/laser.png' }
+	},
+	sniperRifle: {
+		attack: { kind: 'ranged', damage: [120, 120], cooldown: [3, 3], knockback: 3, aim: 5, projectile: '/mm/projectiles/bullet.png' }
+	},
+	rayGun: {
+		attack: {
+			kind: 'ranged',
+			damage: [70, 85],
+			cooldown: [CHARGED_COOLDOWN, CHARGED_COOLDOWN],
+			charges: [1, 1],
+			knockback: 1.5,
+			projectile: '/mm/projectiles/laser.png'
+		}
+	},
+	invisibilityPotion: {
+		action: {
+			// like healing for the damage it'd save, so it's saved for when the wearer is hurt
+			priority: (item) => {
+				const f = item.owner;
+				if (f.isInvisible()) return 0;
+				const incoming = (REALIZED_DAMAGE * f.enemies().reduce((sum, e) => sum + e.danger(), 0) * 8) / Math.max(f.teammates().length, 1);
+				return healValue(f, incoming, f.actionTime(0, CHARGED_COOLDOWN));
+			},
+			perform: (item) => {
+				const f = item.owner;
+				invisible(f, 8);
+				f.log({ type: 'text', fighter: f.index, text: 'vanished', color: '#ccf' });
+				f.setCooldown(Math.max(f.cooldown, CHARGED_COOLDOWN));
+				f.removeItem(item);
+				f.log({ type: 'animation', fighter: f.index, updates: { equipment: f.wornKeys() } });
+			}
+		},
+		value: { hp: () => 30 }
+	},
+	flashbang: {
+		attack: {
+			kind: 'ranged',
+			damage: [10, 10],
+			cooldown: [CHARGED_COOLDOWN, CHARGED_COOLDOWN],
+			knockback: 0.5,
+			singleUse: true,
+			projectile: '/mm/projectiles/fireball.png',
+			effectValue: (item, target) =>
+				item.owner
+					.enemies()
+					.filter((e) => e.distanceTo(target) <= 10)
+					.reduce((sum, e) => sum + disablePlanning(e, 'stunned', 3), 0)
+		},
+		onHitDealt: (item, target, _damage, source) => {
+			if (source !== item) return;
+			for (const e of item.owner.enemies()) if (e.distanceTo(target) <= 10) stun(e, 3);
+		},
+		// one 3s stun of a couple of enemies, spread over the fight
+		value: { dps: (_attuned, ctx) => (0.6 * (10 + TYPICAL_DPS * 3 * Math.min(ctx.enemies, 2))) / TYPICAL_FIGHT_SECONDS }
+	},
+	leafBlower: {
+		action: {
+			priority: (item) => {
+				const f = item.owner;
+				const close = f.enemies().filter((e) => f.distanceTo(e) <= MELEE_RANGE && e.prefersMelee() && !e.isStunned());
+				// they're out of the fight for as long as it takes them to walk back, and to line up again
+				return close.reduce((sum, e) => sum + disableValue([e], 'blown', 15 / e.metersPerSecond() + 1, f.actionTime(0, 2)), 0);
+			},
+			perform: (item) => {
+				const f = item.owner;
+				f.setCooldown(2);
+				f.log({ type: 'text', fighter: f.index, text: 'whoosh', color: '#cec' });
+				for (const e of f.enemies()) if (f.distanceTo(e) <= MELEE_RANGE) push(f, e, 15);
+			}
+		},
+		value: { hp: () => 25 }
+	},
+	houseArrestAnkleBracelet: {
+		statMods: () => ALL_STATS(4),
+		onFightStart: (item) => {
+			const f = item.owner;
+			f.tether = { x: f.x, y: f.y, radius: 5 };
+		},
+		// melee fighters can only hit whoever comes to them
+		value: { output: (_attuned, ctx) => (ctx.melee ? 0.6 : 1) }
+	},
+	cardboardCutout: {
+		onFightStart: (item) => {
+			const f = item.owner;
+			const stronger = f.items.some((i) => i.key === 'strongerSummons');
+			item.owner.fight.summonDecoy(f, stronger ? 75 : 50);
+		},
+		value: { hp: () => 40 }
+	},
+	jortsOfPower: {
+		onTick: (item) => every(item, item.attuned ? 4 : 5, () => item.owner.changeStats({ strength: 1 })),
+		value: { stats: (attuned) => ({ strength: TYPICAL_FIGHT_SECONDS / (attuned ? 4 : 5) / 2 }) }
+	},
+	bulletproofVest: {
+		preventHit: (item, _attacker, _damage, source) => {
+			const f = item.owner;
+			if (source.behavior.attack?.kind === 'melee' || f.fight.rng.real() >= 0.5) return false;
+			f.log({ type: 'text', fighter: f.index, text: 'blocked', color: '#aaa' });
+			return true;
+		},
+		value: { blocked: () => 0.5 * RANGED_SHARE }
+	},
+	lightningRod: {
+		drawsRanged: true,
+		onHitTaken: (item) => {
+			const f = item.owner;
+			f.charges += 1;
+			f.log({ type: 'particle', fighter: f.index, img: '/mm/charge.png' });
+		},
+		value: {
+			weight: 1.5,
+			dps: (_attuned, ctx) =>
+				ctx.primaryCharges > 0 ? ctx.primaryDps * Math.min(1, (ctx.hitsTaken * ctx.timeToCharge) / ctx.primaryCharges / TYPICAL_FIGHT_SECONDS) : 0
+		}
+	},
+	bandolier: { rangedCooldownReduction: 0.5 },
+	batteryPack: {
+		onFightStart: (item) => {
+			item.owner.charges += item.attuned ? 3 : 2;
+		},
+		// charging time saved
+		value: {
+			dps: (attuned, ctx) =>
+				ctx.primaryCharges > 0 ? ctx.primaryDps * Math.min(1, ((attuned ? 3 : 2) * ctx.timeToCharge) / TYPICAL_FIGHT_SECONDS) : 0
+		}
+	},
+	sponsorPatch: {
+		onTick: (item) => {
+			const f = item.owner;
+			const earned = Math.floor(f.dmgDealt / (item.attuned ? 50 : 60));
+			if (earned <= (item.state.paid ?? 0)) return;
+			const amount = earned - (item.state.paid ?? 0);
+			item.state.paid = earned;
+			f.fight.transferMoney(null, f.team, amount);
+			f.fight.credit(item, 'moneyEarned', amount);
+			f.log({ type: 'money', fighter: f.index, amount, from: null });
+		}
+	},
+	armbandOfSolidarity: {
+		onTeammateKnockedOut: (item) => hype(item.owner, item.attuned ? 5 : 3),
+		value: { stats: (attuned, ctx) => ALL_STATS((6 * (attuned ? 5 : 3) * Math.min(ctx.teammates, 1)) / 2 / TYPICAL_FIGHT_SECONDS) }
+	},
+	antiStaticWristband: {
+		onHitDealt: (_item, target) => {
+			target.charges = 0;
+		},
+		value: { dps: (_attuned, ctx) => 2 * ctx.hitsPerSecond }
+	},
+	horriblePants: {
+		onTick: (item) => {
+			const f = item.owner;
+			for (const e of f.enemies()) if (f.distanceTo(e) <= (item.attuned ? 20 : 10)) taunt(e, f);
+		},
+		value: { weight: 2 }
+	},
+	shirtOfManyBelts: {
+		onHitTaken: (_item, attacker, _damage, source) => {
+			if (source.behavior.attack?.kind === 'melee') stun(attacker, 2);
+		},
+		value: { dps: (_attuned, ctx) => TYPICAL_DPS * Math.min(0.8, (2 * (1 - RANGED_SHARE) * ctx.hitsTaken) / TYPICAL_FIGHT_SECONDS) }
 	}
 };
 
 function moneySwordDamage(attuned: boolean, money: number): number {
-	return 20 * Math.floor(Math.max(money, 0) / (attuned ? 10 : 12));
+	return 10 * Math.floor(Math.max(money, 0) / (attuned ? 6 : 8));
 }
 
 /** The standing teammate (or the fighter themself) it's worth most to heal. */
@@ -572,8 +810,8 @@ export const ABILITY_BEHAVIORS: Record<string, Behavior> = {
 		onHitDealt: (item) => item.owner.changeStats({ strength: 1 }),
 		value: { stats: (_attuned, ctx) => ({ strength: (ctx.hitsPerSecond * TYPICAL_FIGHT_SECONDS) / 2 }) }
 	},
-	sleepyhead: {
-		onFightStart: (item) => sleep(item.owner, 5),
+	inattentive: {
+		onFightStart: (item) => stun(item.owner, 5),
 		// nobody can act for the first 3s anyway; after that, 2s more of not fighting
 		value: { output: (_attuned, ctx) => (ctx.immune ? 1 : 1 - 2 / TYPICAL_FIGHT_SECONDS - 0.05) }
 	},
@@ -619,13 +857,13 @@ export const ABILITY_BEHAVIORS: Record<string, Behavior> = {
 	bully: {
 		damageMultiplier: (_item, target) => (target.effects.some((e) => e.negative) ? 2 : 1)
 	},
-	// nothing summons yet
+	// see cardboardCutout
 	strongerSummons: {},
 	lastStand: {
 		onTick: (item) => {
 			const f = item.owner;
 			if (item.state.hadTeammates === undefined) {
-				item.state.hadTeammates = f.fight.fighters.some((t) => t.team === f.team && t !== f) ? 1 : 0;
+				item.state.hadTeammates = f.fight.fighters.some((t) => t.team === f.team && t !== f && !t.summoner) ? 1 : 0;
 			}
 			const alone = item.state.hadTeammates === 1 && f.teammates().every((t) => t === f);
 			setAllStatsBonus(item, alone ? 6 : 0);

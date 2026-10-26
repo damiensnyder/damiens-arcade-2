@@ -12,9 +12,22 @@ hand, $30
 Melee. Deals 50 [attuned: 65] damage. Cooldown 3s.
 Durability: 858/1561; Bane of Arthropods IV
 
+Rapier
+hand, $24
+Melee. Deals 40 [attuned: 50] damage. Damage scales with accuracy instead of strength. Cooldown 3s.
+
 Roller Blades
 feet, $23
 Melee. Deals 30 damage. Cooldown 4s. +2 [attuned: +3] speed.
+
+Taser
+hand, $22
+Melee. Deals 25 damage. Requires 1 charge. On hit: Target is stunned for 2s [attuned: 3s].
+
+Baseball Bat
+two-handed, $21
+Melee. Deals 25 [attuned: 30] damage. Cooldown 3.5s. On hit: Knock the target 20m away.
+batter up!
 
 The Ratio-Inator
 hand, $20
@@ -24,6 +37,10 @@ hold this.
 Headbutter's Delight
 head, $16
 Melee. Deals 20 [attuned: 25] damage. Damage scales with toughness instead of strength. Cooldown 3s.
+
+Claws for Alarm
+hand, $15
+Melee. Deals 10 damage. Cooldown 2s. On hit: Target is scared for 1s [attuned: 2s].
 
 Shiv
 hand, $14
@@ -56,9 +73,17 @@ Laser Blaster
 hand, $36
 Ranged. Deals 40 [attuned: 50] damage. Cooldown 2s.
 
+Sniper Rifle
+two-handed, $34
+Ranged. Deals 120 damage. Cooldown 3s. Must stand still for 5s before each shot.
+
 Tranquilizer Gun
 hand, $32
-Ranged. Deals 10 damage. Cooldown 4s. On hit: Target falls asleep.
+Ranged. Deals 10 damage. Cooldown 4s. On hit: Target is stunned for 4s.
+
+Ray Gun
+hand, $30
+Ranged. Deals 70 [attuned: 85] damage. Requires 1 charge.
 
 Flare Gun
 hand, $15
@@ -78,6 +103,10 @@ Halo
 head, $25
 When a teammate is KO'd, revive them at 50% HP. Remove Halo.
 
+Invisibility Potion
+hand, $30
+Single-use. Turn invisible for 8s.
+
 Flamingo Floaty
 legs, $16
 On hit taken: Prevent all damage. Remove Flamingo Floaty.
@@ -85,11 +114,11 @@ On hit taken: Prevent all damage. Remove Flamingo Floaty.
 
 Flashbang
 hand, $15
-Single-use. Ranged. On hit: Stun all enemies within 10m of the target for 3s.
+Single-use. Ranged. Deals 10 damage. On hit: Stun all enemies within 10m of the target for 3s.
 
 Corn Dog
 hand, $12
-Single-use. Heals 40 HP.
+Single-use. Heal 40 HP.
 surprisingly nutritious
 
 ## Other actions
@@ -97,6 +126,10 @@ surprisingly nutritious
 Flower of Power
 hand, $11
 Heal a teammate for 40 [attuned: 50] HP. Requires 1 charge.
+
+Leaf Blower
+two-handed, $7
+Blow all enemies in melee range 15m away. Cooldown 2s.
 
 Foam Finger
 hand, $6
@@ -118,6 +151,14 @@ teamwork? i sure hope it does!
 Devil Horns
 head, $20
 -2 toughness. +3 [attuned: +4] to all other stats.
+
+House Arrest Ankle Bracelet
+feet, $16
++2 to all stats. Must stay within 5m of starting position.
+
+Cardboard Cutout
+hand, $12
+When the fight starts, summon a decoy.
 
 Viking Helmet
 head, $11
@@ -169,21 +210,45 @@ Chainsaw Headband
 head, $15
 Every second, deal 4 [attuned: 5] damage to all enemies in melee range.
 
+Jorts of Power
+legs, $15
+Every 5s [attuned: 4s], gain +0.5 strength.
+
+Bulletproof Vest
+hand, $14
+50% chance to block ranged hits.
+
 Shrapnel
 head, $13
 When KO'd: Deal 40 damage to ALL fighters within 10m.
 
+Lightning Rod
+head, $12
+All opposing ranged attacks target the wearer. On hit taken: Gain 1 charge.
+
 Bandolier
 torso, $12
 Ranged cooldowns are 0.5s shorter.
+
+Battery Pack
+torso, $11
+Start each fight with 2 [attuned: 3] charges.
 
 Rhinoceros Beetle Horn
 head, $10
 On hit dealt: Gain +1 [attuned: +1.5] strength.
 the rhinoceros beetle is the strongest creature on earth
 
-Anti-Static Wristband
+Sponsor Patch
+torso, $10
+Team gains $1 for every 60 [attuned: 50] damage dealt.
+
+Armband of Solidarity
 hand, $9
+When a teammate is KO'd: Become hyped for 3s [attuned: 5s].
+
+Anti-Static Wristband
+hand, $8
 On hit: Remove all charges from the target.
 
 Eyepatch
@@ -191,11 +256,15 @@ head, $8
 On KO: Loot $2 [attuned: $4] from the opponent.
 shouldn't have brought ye wallet into the arena!
 
+Horrible Pants
+legs, $7
+Enemies within 10m [attuned: 20m] are taunted.
+
 Censored Bar
 legs, $4
 Wearer is immune to negative status effects.
 
-# Abilities
+# Fighter abilities
 
 Powerful Fists, $17
 Fists deal double damage.
@@ -243,12 +312,12 @@ Deals double damage to targets with a negative status effect.
 Stronger Summons, $1
 This fighter's summons spawn with +50% HP.
 
-Status Immunity, $1
-Immune to negative status effects.
-
 Klutz, -$2
 When hit: 10% chance to drop a handheld equipment.
 bit of a klutz. teehee!
+
+Status Immunity, $1
+Immune to negative status effects.
 
 No Attunement, -$3
 Can't attune to equipment.
@@ -269,7 +338,10 @@ don't act like you're any better
 
 on fire = takes 5 damage per second for 5s. (does not stack.)
 stunned = can't move or use actions.
-asleep = can't move or use actions until taking damage.
 taunted = must attack the taunting enemy.
 scared = runs away from the scaring enemy, doesn't take any actions.
 enemies much less likely to attack = enemies will target teammates without that ability first.
+decoy = copy of the fighter but it has 50 HP, 0 to all stats, no equipment, and doesn't move or attack.
+
+fighter ability names are only for reference, not displayed in game.
+all actions without a cooldown have an implicit 1s cooldown.

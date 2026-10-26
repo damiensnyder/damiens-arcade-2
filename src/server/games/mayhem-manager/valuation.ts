@@ -136,7 +136,7 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 	const base = effectiveStats(fighter, equipment);
 	addStats(base, HYPE_MODS, around.hyped);
 	const immune = parts.some((p) => p.behavior.blocksEffect);
-	const ctx: ValueContext = { hitsPerSecond: 0, hitsTaken: 0, timeToCharge: 0, startDelay: INITIAL_COOLDOWN, immune, ...around };
+	const ctx: ValueContext = { hitsPerSecond: 0, hitsTaken: 0, timeToCharge: 0, startDelay: INITIAL_COOLDOWN, immune, melee: true, primaryCharges: 0, primaryDps: 0, ...around };
 
 	// worked out twice: some effects depend on how often the fighter hits or gets hit
 	let result: Estimate = { output: 0, hp: 0, weight: 1, hype: 0, revive: 0, canSupport: false };
@@ -147,6 +147,7 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 		const timeToCharge = Math.max(4.8 - 0.32 * s.energy, 0.8);
 		const damageTaken = Math.max(1.25 - 0.05 * s.toughness, 0.5);
 		const cooldownReduction = parts.reduce((sum, p) => sum + (p.behavior.cooldownReduction ?? 0), 0);
+		const rangedCooldownReduction = parts.reduce((sum, p) => sum + (p.behavior.rangedCooldownReduction ?? 0), 0);
 		// nobody acts before the initial cooldown; melee fighters also have to cross the arena, and
 		// charged attacks need charging first. Attacks only count for the rest of a typical fight.
 		const approach = Math.max(ARENA_SIZE - 2 * START_INSET - MELEE_RANGE, 0) / Math.max(5 + s.speed, 1);
@@ -156,15 +157,19 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 		let dps = 0;
 		let hitsPerSecond = 0;
 		let ranged = false;
+		let kiting = false;
+		let primaryCharges = 0;
 		let primary: Part | null = null;
 		let bestScore = 0;
 		for (const part of parts) {
 			const spec = part.behavior.attack;
-			if (!spec) continue;
+			// single-use attacks count through their value hints
+			if (!spec || spec.singleUse) continue;
 			const stats = attackStats(spec, part.attuned);
 			const { cooldown, charges } = stats;
 			const damage = spec.planDamage?.(part.attuned, ctx) ?? stats.damage;
-			const cycle = Math.max(cooldown - cooldownReduction, TICK_LENGTH) + charges * timeToCharge;
+			const reduction = cooldownReduction + (spec.kind === 'melee' ? 0 : rangedCooldownReduction);
+			const cycle = Math.max(cooldown - reduction, TICK_LENGTH, spec.aim ?? 0) + charges * timeToCharge;
 			const strength = Math.max(0.5 + 0.1 * s[spec.scalesWith ?? 'strength'], 0.25);
 			const hitChance = Math.max(0, Math.min(0.25 + 0.05 * s.accuracy, 1));
 			const share = uptime(Math.max(INITIAL_COOLDOWN, spec.kind === 'melee' ? approach : 0) + charges * timeToCharge);
@@ -180,6 +185,9 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 				dps = (perUse * share) / cycle;
 				hitsPerSecond = rate;
 				ranged = spec.kind !== 'melee';
+				// fighters who have to aim stand their ground
+				kiting = ranged && !spec.aim;
+				primaryCharges = charges;
 				primary = part;
 			}
 		}
@@ -194,7 +202,7 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 		let busy = 0;
 		let canSupport = false;
 		const actions: { healing?: number; hype?: number; busy: number }[] = [];
-		Object.assign(ctx, { timeToCharge });
+		Object.assign(ctx, { timeToCharge, melee: !ranged, primaryCharges, primaryDps: dps });
 		for (const part of parts) {
 			const v = part.behavior.value;
 			weight *= part.behavior.targetWeight ?? 1;
@@ -222,7 +230,7 @@ function estimateUncached(fighter: Fighter, equipment: string[], around: Surroun
 			busy += a.busy / time;
 		}
 		hp /= 1 - blocked;
-		if (ranged) hp *= TUNING.rangedKiting;
+		if (kiting) hp *= TUNING.rangedKiting;
 		hp *= Math.max(0.6, Math.min(1.4, 1 + TUNING.speedSurvival * (s.speed - 5)));
 		ctx.hitsTaken = hp / TYPICAL_HIT;
 		result = { output: dps * outputFactor * (1 - busy) + healing, hp, weight, hype, revive, canSupport };

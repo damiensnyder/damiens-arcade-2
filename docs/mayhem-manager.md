@@ -51,9 +51,11 @@ Leagues can run for dozens of seasons, so the data that grows is kept out of tho
 
 `docs/mm-catalog-plain.txt` is the source of truth for equipment and fighter abilities: names, slots, prices, descriptions and flavor text. `##` headings in it are just for grouping. After editing it, run `npm run check:mm-catalog`. It lists everything in the code that no longer matches the txt, plus anything missing battle behavior or images. Equipment and abilities are matched by name, so renaming one shows up as one removed and one added.
 
-Only equipment whose description has an `[attuned: …]` part can be attuned to. Fighters who refuse unattuned equipment can't use the rest. Charging equipment has a 1s cooldown unless its description says otherwise. Equipment without art yet borrows another item's images (`PLACEHOLDER_ART` in `catalog.ts`).
+Only equipment whose description has an `[attuned: …]` part can be attuned to. Fighters who refuse unattuned equipment can't use the rest. Charging equipment, and any other action without a cooldown in its description, has a 1s cooldown. Equipment without art yet borrows another item's images (`PLACEHOLDER_ART` in `catalog.ts`).
 
-Status effects: frozen (slower, cooldowns at half speed), burning (5 damage a second; setting someone on fire again only refreshes it), asleep (doesn't move or act until taking damage; enemies leave sleepers for last), taunted (can only attack the taunter), scared (runs from whoever scared them and doesn't attack), and hyped (+3 stars to all stats). All but hyped are negative. If everyone standing is asleep, they all wake up.
+Status effects: frozen (slower, cooldowns at half speed), burning (5 damage a second; setting someone on fire again only refreshes it), stunned (doesn't move or act), taunted (can only attack the taunter), scared (runs from whoever scared them and doesn't attack), hyped (+3 stars to all stats) and invisible (enemies can't pick them as a target, though area effects still hit). Hyped and invisible are positive; the rest are negative.
+
+Summons (the cardboard cutout's decoy) are fighters on the team that don't count as standing, earn no box score and can't be healed or hyped. A decoy looks as dangerous to enemies as whoever it copies, so it draws attacks.
 
 Overtime: from 30s into a fight, everyone standing loses half a star of toughness every 5s, so fights can't stall (with healing, say). Fights stop at 2 minutes regardless.
 

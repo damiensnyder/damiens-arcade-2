@@ -105,10 +105,10 @@ export function primaryStat(f: Fighter, keys: string[]): { stat: keyof Stats; ki
 	let best = { dps: -1, stat: 'strength' as keyof Stats, kind: 'fists' };
 	for (const b of behaviors) {
 		const a = b.attack;
-		if (!a) continue;
+		if (!a || a.singleUse) continue;
 		const attuned = false;
 		const damage = a.damage[attuned ? 1 : 0];
-		const cooldown = a.cooldown[attuned ? 1 : 0];
+		const cooldown = Math.max(a.cooldown[attuned ? 1 : 0], a.aim ?? 0);
 		const charges = a.charges?.[0] ?? 0;
 		const dps = (a.kind === 'aoe' ? damage * 2 : a.kind === 'ranged' ? damage * 0.5 : damage) / (cooldown + charges * 4);
 		if (dps > best.dps) {
