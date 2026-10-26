@@ -34,29 +34,29 @@ hand, $20
 Melee. All hits reduce the target's HP by 1/3 [attuned: 1/2]. Cooldown 2.5s.
 hold this.
 
-Headbutter's Delight
-head, $11
-Melee. Deals 20 [attuned: 25] damage. Damage scales with toughness instead of strength. Cooldown 3s.
+Torch
+hand, $15
+Melee. Deals 12 [attuned: 16] damage. Cooldown 2.5s. On hit: Set the target on fire.
 
-Claws for Alarm
-hand, $13
-Melee. Deals 12 damage. Cooldown 2s. On hit: Target is scared for 1s [attuned: 2s].
+Steel-Toed Boots
+feet, $15
+Melee. Deals 20 [attuned: 25] damage. Cooldown 3.5s. +1 toughness.
 
 Shiv
 hand, $14
 Melee. Deals 16 damage. Cooldown 2s [attuned: 1.5s].
 
-Torch
-hand, $15
-Melee. Deals 12 [attuned: 16] damage. Cooldown 2.5s. On hit: Set the target on fire.
+Claws for Alarm
+hand, $13
+Melee. Deals 12 damage. Cooldown 2s. On hit: Target is scared for 1s [attuned: 2s].
 
 The Money Sword
 hand, $12
 Melee. Deals 10 damage for every $8 [attuned: $6] your team has. Cooldown 3s.
 
-Steel-Toed Boots
-feet, $15
-Melee. Deals 20 [attuned: 25] damage. Cooldown 3.5s. +1 toughness.
+Headbutter's Delight
+head, $11
+Melee. Deals 20 [attuned: 25] damage. Damage scales with toughness instead of strength. Cooldown 3s.
 
 ## Ranged weapons
 
@@ -64,14 +64,14 @@ Lasest Blaster
 hand, $60
 Ranged. Deals 70 [attuned: 80] damage. Cooldown 2s.
 
+Laser Blaster
+hand, $36
+Ranged. Deals 40 [attuned: 50] damage. Cooldown 2s.
+
 Wand of the Great Pyromaniac
 hand, $35
 Ranged. Deals 50 [attuned: 60] damage to all enemies and sets them on fire. Requires 3 charges.
 the Great Pyromaniac might have been a little *too* great
-
-Laser Blaster
-hand, $36
-Ranged. Deals 40 [attuned: 50] damage. Cooldown 2s.
 
 Sniper Rifle
 two-handed, $34
@@ -127,14 +127,14 @@ Flower of Power
 hand, $17
 Heal a teammate for 40 [attuned: 50] HP. Requires 1 charge.
 
-Leaf Blower
-two-handed, $7
-Blow all enemies within 10m back 15m. Cooldown 2s.
-
 Foam Finger
 hand, $12
 Make all teammates hyped for 6s [attuned: 8s]. Requires 1 charge.
 rah rah rah! go team go
+
+Leaf Blower
+two-handed, $7
+Blow all enemies within 10m back 15m. Cooldown 2s.
 
 ## Stat changes
 
@@ -175,6 +175,11 @@ it's just so aerodynamic
 
 ## Passive effects
 
+Frilly Skirt
+legs, $26
+Makes opponents much less likely to target the wearer.
+you wouldn't hit someone in a frilly little skirt, would you?
+
 Shield
 hand, $25
 50% chance to block hits when facing the attacker.
@@ -182,11 +187,6 @@ hand, $25
 Zap Helmet
 head, $20
 On charge: Deal 25 [attuned: 30] damage to the nearest enemy fighter.
-
-Frilly Skirt
-legs, $26
-Makes opponents much less likely to target the wearer.
-you wouldn't hit someone in a frilly little skirt, would you?
 
 Shirt of Many Belts
 torso, $19
@@ -210,21 +210,25 @@ Chainsaw Headband
 head, $15
 Every second, deal 5 [attuned: 6] damage to all enemies in melee range.
 
-Jorts of Power
-legs, $12
-Every 5s [attuned: 4s], gain +0.5 strength.
+Lightning Rod
+head, $15
+All opposing ranged attacks target the wearer. On hit taken: Gain 1 charge.
 
 Bulletproof Vest
 hand, $14
 50% chance to block ranged hits.
 
+Censored Bar
+legs, $14
+Wearer is immune to negative status effects.
+
 Shrapnel
 head, $13
 When KO'd: Deal 40 damage to ALL fighters within 10m.
 
-Lightning Rod
-head, $15
-All opposing ranged attacks target the wearer. On hit taken: Gain 1 charge.
+Jorts of Power
+legs, $12
+Every 5s [attuned: 4s], gain +0.5 strength.
 
 Bandolier
 torso, $12
@@ -243,6 +247,11 @@ Sponsor Patch
 torso, $10
 Team gains $1 for every 60 [attuned: 50] damage dealt.
 
+Horrible Pants
+legs, $10
+Enemies within 10m [attuned: 20m] are taunted.
+thrifted
+
 Armband of Solidarity
 hand, $9
 When a teammate is KO'd: Become hyped for 3s [attuned: 5s].
@@ -255,15 +264,6 @@ Eyepatch
 head, $8
 On KO: Loot $2 [attuned: $4] from the opponent.
 shouldn't have brought ye wallet into the arena!
-
-Horrible Pants
-legs, $10
-Enemies within 10m [attuned: 20m] are taunted.
-thrifted
-
-Censored Bar
-legs, $14
-Wearer is immune to negative status effects.
 
 # Fighter abilities
 
@@ -288,6 +288,9 @@ Brand Ambassador, $10
 On KO: Team gains $3.
 it's called being a "brand ambassador"
 
+Status Immunity, $10
+Immune to negative status effects.
+
 Lone Wolf, $8
 +3 to all stats when all other teammates are downed.
 
@@ -304,11 +307,11 @@ All enemies within 10m are taunted.
 Mentor, $6
 After each training camp, gives a younger teammate +0.5 stars to a random stat.
 
-Random Ability, $4
-Starts each fight with a random ability.
-
 Opportunist, $6
 Deals double damage to targets with a negative status effect.
+
+Random Ability, $4
+Starts each fight with a random ability.
 
 Stronger Summons, $1
 This fighter's summons spawn with +50% HP.
@@ -316,9 +319,6 @@ This fighter's summons spawn with +50% HP.
 Klutz, -$2
 When hit: 10% chance to drop a handheld equipment.
 bit of a klutz. teehee!
-
-Status Immunity, $10
-Immune to negative status effects.
 
 No Attunement, -$3
 Can't attune to equipment.
