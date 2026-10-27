@@ -82,6 +82,7 @@ export default class MayhemManager extends GameLogicHandler {
 		this.rng = new Rng();
 		this.s = {
 			version: 2,
+			createdAt: Date.now(),
 			season: 1,
 			phase: { kind: 'pregame' },
 			teams: [],
@@ -194,7 +195,7 @@ export default class MayhemManager extends GameLogicHandler {
 				return false;
 			}
 			case 'exportLeague':
-				this.emitPrivate(viewerId, { type: 'leagueExport', league: this.exportLeague() });
+				this.emitPrivate(viewerId, { type: 'leagueExport', league: this.exportLeague(), autosave: action.autosave });
 				return false;
 			case 'importLeague':
 				if (!isHost) return false;

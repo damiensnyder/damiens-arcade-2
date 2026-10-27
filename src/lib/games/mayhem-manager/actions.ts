@@ -34,7 +34,8 @@ export const actionSchema = z.discriminatedUnion('type', [
 	z.object({ type: z.literal('getHistory') }),
 	/** Per-fighter totals for one finished season. */
 	z.object({ type: z.literal('getSeasonStats'), season: z.number().int().min(1) }),
-	z.object({ type: z.literal('exportLeague') }),
+	/** `autosave` exports go to the browser's saved leagues instead of a file. */
+	z.object({ type: z.literal('exportLeague'), autosave: z.boolean().optional() }),
 	z.object({ type: z.literal('importLeague'), league: z.unknown() })
 ]);
 

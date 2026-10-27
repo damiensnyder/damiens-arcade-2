@@ -2,21 +2,80 @@
 	import { goto } from '$app/navigation';
 	import { getWsUrl } from '$lib/ws/client.js';
 	import ArcadeHeader from '$lib/components/ArcadeHeader.svelte';
+	import {
+		deleteSave,
+		listSaves,
+		loadSave,
+		renameSave,
+		saveName,
+		setPendingImport,
+		type SaveSummary
+	} from '$lib/games/mayhem-manager/saves.js';
+	import type { TeamId } from '$lib/games/mayhem-manager/types.js';
 
 	let joinCode = $state('');
 	let creating = $state(false);
 	let errorMsg = $state('');
+	let saves = $state<SaveSummary[]>([]);
 
-	async function createRoom() {
+	$effect(() => {
+		saves = listSaves();
+	});
+
+	const PHASE_LABELS: Record<string, string> = {
+		pregame: 'pregame',
+		offseason: 'offseason',
+		freeAgency: 'free agency',
+		training: 'training camp',
+		regularSeason: 'regular season',
+		playoffs: 'playoffs',
+		seasonOver: 'season over'
+	};
+
+	async function createRoom(league?: { league: unknown; myTeam: TeamId | null }) {
 		creating = true;
 		errorMsg = '';
 		try {
 			const roomCode = await createRoomViaWS();
+			setPendingImport(league ?? null);
 			goto(`/mayhem-manager/game/${roomCode}`);
 		} catch (e) {
 			errorMsg = e instanceof Error ? e.message : 'Failed to create room';
 			creating = false;
 		}
+	}
+
+	function loadSaved(save: SaveSummary) {
+		const league = loadSave(save.createdAt);
+		if (league === null) {
+			errorMsg = "Couldn't read that saved league.";
+			return;
+		}
+		createRoom({ league, myTeam: save.myTeam });
+	}
+
+	async function loadFile(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+		try {
+			createRoom({ league: JSON.parse(await file.text()), myTeam: null });
+		} catch {
+			errorMsg = "That isn't a valid league file.";
+		}
+	}
+
+	function rename(save: SaveSummary, name: string) {
+		if (name.trim() === saveName(save)) return;
+		renameSave(save.createdAt, name);
+		saves = listSaves();
+	}
+
+	function remove(save: SaveSummary) {
+		if (!confirm(`Delete ${saveName(save)}?`)) return;
+		deleteSave(save.createdAt);
+		saves = listSaves();
 	}
 
 	function createRoomViaWS(): Promise<string> {
@@ -58,7 +117,7 @@
 		<div class="left-col">
 			<h2>Mayhem Manager</h2>
 			<div class="room-section top-level-menu">
-				<button onclick={createRoom} disabled={creating}>
+				<button onclick={() => createRoom()} disabled={creating}>
 					{creating ? 'Creating…' : 'Create League'}
 				</button>
 				{#if errorMsg}
@@ -68,6 +127,36 @@
 					<input type="text" placeholder="Room code" maxlength={4} bind:value={joinCode} onkeydown={handleJoinKey} />
 					<button onclick={joinRoom} style="margin-top: 0;">Join League</button>
 				</div>
+			</div>
+
+			<h2>Saved leagues</h2>
+			<div class="room-section top-level-menu">
+				{#each saves as save (save.createdAt)}
+					<div class="save">
+						<input
+							type="text"
+							class="save-name"
+							value={saveName(save)}
+							maxlength={100}
+							title="rename"
+							onchange={(e) => rename(save, e.currentTarget.value)}
+							onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+						/>
+						<span class="save-info">
+							season {save.season}, {PHASE_LABELS[save.phase] ?? save.phase} · played {new Date(save.savedAt).toLocaleString()}
+						</span>
+						<div class="horiz save-buttons">
+							<button onclick={() => loadSaved(save)} disabled={creating}>Load</button>
+							<button onclick={() => remove(save)}>Delete</button>
+						</div>
+					</div>
+				{:else}
+					<p class="save-info">Leagues you host are saved in this browser automatically.</p>
+				{/each}
+				<label class="file-row">
+					Load from file
+					<input type="file" accept="application/json,.json" onchange={loadFile} disabled={creating} />
+				</label>
 			</div>
 		</div>
 
@@ -126,6 +215,34 @@
 
 	.join-row button {
 		white-space: nowrap;
+	}
+
+	.save {
+		gap: 0.25rem;
+		align-items: stretch;
+	}
+
+	.save-name {
+		margin: 0;
+	}
+
+	.save-info {
+		font-size: 0.85rem;
+		opacity: 0.7;
+		margin: 0;
+	}
+
+	.save-buttons {
+		gap: 0.5rem;
+	}
+
+	.save-buttons button {
+		margin-top: 0;
+	}
+
+	.file-row {
+		gap: 0.25rem;
+		font-size: 0.9rem;
 	}
 
 	.how-to-play {

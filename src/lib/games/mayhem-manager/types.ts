@@ -315,7 +315,7 @@ export interface FightLog {
 /** Sent only to the viewer who asked for it. */
 export type MMPrivateEvent =
 	| { type: 'fightLog'; log: FightLog }
-	| { type: 'leagueExport'; league: unknown }
+	| { type: 'leagueExport'; league: unknown; autosave?: boolean }
 	| { type: 'notice'; message: string }
 	| { type: 'history'; history: LeagueHistoryWire }
 	| { type: 'seasonStats'; version: number; season: number; totals: PackedRows };

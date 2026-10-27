@@ -1,4 +1,5 @@
 import type { MMAction } from './actions.js';
+import { putSave } from './saves.js';
 import { computeStandings, playoffRoundCount, playoffSize, regularSeasonWeeks } from './rules.js';
 import type {
 	Equipment,
@@ -50,6 +51,9 @@ export class MMState {
 	history = $state<LeagueHistory | null>(null);
 	/** Per-fighter totals for finished seasons, fetched one season at a time. */
 	seasonTotals = $state<Map<number, StatTotal[]>>(new Map());
+	/** Set once the viewer has been host; from then on the league autosaves to their browser. */
+	wasHost = false;
+	private autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 	private historyRequested: number | null = null;
 	private seasonTotalsRequested = new Set<number>();
 
@@ -103,7 +107,10 @@ export class MMState {
 		if (e.type === 'fightLog') {
 			if (this.watching?.matchId === e.log.matchId) this.watching = { matchId: e.log.matchId, log: e.log };
 		} else if (e.type === 'leagueExport') {
-			this.leagueExport = JSON.stringify(e.league);
+			if (!e.autosave) this.leagueExport = JSON.stringify(e.league);
+			else if (!putSave(e.league, this.vp?.myTeam ?? null)) {
+				this.notice = "Couldn't autosave the league in this browser. Save a league file from the history tab instead.";
+			}
 		} else if (e.type === 'history') {
 			this.history = unpackHistory(e.history);
 		} else if (e.type === 'seasonStats') {
@@ -114,6 +121,20 @@ export class MMState {
 			this.notice = e.message;
 			if (this.watching && !this.watching.log) this.watching = null;
 		}
+	}
+
+	/** Autosaves the league shortly after things settle down, if the viewer has ever been host. */
+	scheduleAutosave(): void {
+		if (!this.wasHost || !this.vp || this.vp.phase.kind === 'pregame') return;
+		if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
+		this.autosaveTimer = setTimeout(() => {
+			this.autosaveTimer = null;
+			this.act({ type: 'exportLeague', autosave: true });
+		}, 2000);
+	}
+
+	dispose(): void {
+		if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
 	}
 
 	/** Asks for the league history if we don't have the current version. Safe to call often. */

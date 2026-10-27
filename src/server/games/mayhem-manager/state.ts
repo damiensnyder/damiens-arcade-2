@@ -45,6 +45,8 @@ export interface TeamState {
 
 export interface LeagueState {
 	version: 2;
+	/** When the league was created (ms since epoch). Identifies its save in the browser. */
+	createdAt: number;
 	season: number;
 	phase: Phase;
 	teams: TeamState[];
@@ -185,6 +187,8 @@ const statNumbers = {
 
 export const leagueSchema = z.object({
 	version: z.literal(2),
+	// leagues saved before saves were keyed by creation time get one on import
+	createdAt: int.nonnegative().default(() => Date.now()),
 	season: int.min(1),
 	phase,
 	teams: z.array(team).max(MAX_TEAMS),

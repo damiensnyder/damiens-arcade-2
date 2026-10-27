@@ -4,6 +4,7 @@
 	import { MMState } from '$lib/games/mayhem-manager/state.svelte.js';
 	import type { MMViewpointWire } from '$lib/games/mayhem-manager/types.js';
 	import Game from '$lib/games/mayhem-manager/Game.svelte';
+	import { pendingImport, setPendingImport } from '$lib/games/mayhem-manager/saves.js';
 
 	let { data } = $props();
 
@@ -15,11 +16,25 @@
 
 	$effect(() => {
 		room.connect(data.roomCode);
-		const unsubGamestate = room.onGamestate((state) => mm.applyGamestate(state as MMViewpointWire));
+		const unsubGamestate = room.onGamestate((state) => {
+			mm.applyGamestate(state as MMViewpointWire);
+			if (room.pov !== null && room.host === room.pov) {
+				mm.wasHost = true;
+				// a league picked on the main page: load it into this new room, back on the team we had
+				const pending = pendingImport;
+				if (pending) {
+					setPendingImport(null);
+					mm.act({ type: 'importLeague', league: pending.league });
+					if (pending.myTeam !== null) mm.act({ type: 'replace', team: pending.myTeam });
+				}
+			}
+			mm.scheduleAutosave();
+		});
 		const unsubEvent = room.onEvent((event) => mm.handleEvent(event as { type: string }));
 		return () => {
 			unsubGamestate();
 			unsubEvent();
+			mm.dispose();
 			room.disconnect();
 		};
 	});
